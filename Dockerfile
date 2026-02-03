@@ -24,21 +24,19 @@ WORKDIR /app
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nestjs -u 1001 -G nodejs
+    adduser -S nestjs -u 1001 -G nodejs && \
+    chown nestjs:nodejs /app
 
-# Copy package files
-COPY package.json package-lock.json ./
+USER nestjs
 
-# Install production dependencies only
+# Copy package files with correct ownership
+COPY --chown=nestjs:nodejs package.json package-lock.json ./
+
+# Install production dependencies only (files created with correct ownership)
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy compiled output from builder
-COPY --from=builder /app/dist ./dist
-
-# Set ownership
-RUN chown -R nestjs:nodejs /app
-
-USER nestjs
+COPY --chown=nestjs:nodejs --from=builder /app/dist ./dist
 
 EXPOSE 3000
 
