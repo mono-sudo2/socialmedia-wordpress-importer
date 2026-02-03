@@ -101,7 +101,12 @@ export class FacebookSyncService {
         ? Math.floor(connection.lastSyncAt.getTime() / 1000)
         : Math.floor(Date.now() / 1000) - 86400; // Default to last 24 hours
 
-      const posts = await this.fetchPosts(targetId, accessToken, since);
+      const posts = await this.fetchPosts(
+        targetId,
+        accessToken,
+        since,
+        !!connection.pageId,
+      );
 
       this.logger.log(
         `Found ${posts.length} new posts for connection ${connection.id}`,
@@ -131,13 +136,17 @@ export class FacebookSyncService {
     targetId: string,
     accessToken: string,
     since: number,
+    isPage: boolean,
   ): Promise<Array<any>> {
+    const endpoint = isPage
+      ? `/${targetId}/published_posts`
+      : `/${targetId}/feed`;
+
     try {
-      const response = await this.axiosInstance.get(`/${targetId}/posts`, {
+      const response = await this.axiosInstance.get(endpoint, {
         params: {
           access_token: accessToken,
-          fields:
-            'id,message,created_time,type,permalink_url,link,story,attachments',
+          fields: 'id,message,created_time',
           since,
           limit: 100,
         },

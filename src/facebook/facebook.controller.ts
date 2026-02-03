@@ -82,16 +82,16 @@ export class FacebookController {
   }
 
   @Get('connections/:connectionId/test')
-  @UseGuards(AuthGuard, RequiresOrganizationGuard)
+  @UseGuards(AuthGuard)
   async testConnection(
     @Param('connectionId') connectionId: string,
     @Query('since') since: string | undefined,
     @CurrentUser() user: UserInfo,
   ) {
     const sinceTimestamp = since ? parseInt(since, 10) : undefined;
-    return this.facebookService.fetchPostsForConnection(
+    return this.facebookService.fetchPostsForConnectionByUser(
       connectionId,
-      user.organizationId!,
+      user.userId,
       sinceTimestamp,
     );
   }

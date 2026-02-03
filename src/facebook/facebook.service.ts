@@ -1,10 +1,16 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
 import { EncryptionService } from '../common/encryption.service';
+import { LogtoService } from '../auth/logto.service';
 import { UserInfo } from '../common/interfaces/user.interface';
 
 @Injectable()
@@ -21,6 +27,7 @@ export class FacebookService {
     private facebookConnectionRepository: Repository<FacebookConnection>,
     private configService: ConfigService,
     private encryptionService: EncryptionService,
+    private logtoService: LogtoService,
   ) {
     const appId = this.configService.get<string>('facebook.appId');
     const appSecret = this.configService.get<string>('facebook.appSecret');
@@ -220,6 +227,37 @@ export class FacebookService {
     );
   }
 
+  async fetchPostsForConnectionByUser(
+    connectionId: string,
+    userId: string,
+    since?: number,
+  ): Promise<Array<Record<string, unknown>>> {
+    const connection = await this.facebookConnectionRepository.findOne({
+      where: { id: connectionId },
+    });
+
+    if (!connection) {
+      throw new NotFoundException('Facebook connection not found');
+    }
+
+    const userOrgs = await this.logtoService.getUserOrganizations(userId);
+    const hasAccess = userOrgs.some(
+      (org) => (org as { id: string }).id === connection.logtoOrgId,
+    );
+
+    if (!hasAccess) {
+      throw new ForbiddenException(
+        'You do not have access to this Facebook connection',
+      );
+    }
+
+    return this.fetchPostsForConnection(
+      connectionId,
+      connection.logtoOrgId,
+      since,
+    );
+  }
+
   async fetchPostsForConnection(
     connectionId: string,
     logtoOrgId: string,
@@ -261,20 +299,51 @@ export class FacebookService {
     const sinceTimestamp =
       since ?? Math.floor(Date.now() / 1000) - 86400; // Default: last 24 hours
 
+    const endpoint = connection.pageId
+      ? `/${targetId}/published_posts`
+      : `/${targetId}/feed`;
+
+    this.logger.log(
+      `Fetching posts for connection ${connection.id}: targetId=${targetId}, endpoint=${endpoint}, since=${sinceTimestamp}`,
+    );
+
     try {
-      const response = await this.axiosInstance.get(`/${targetId}/posts`, {
+      const response = await this.axiosInstance.get(endpoint, {
         params: {
           access_token: accessToken,
-          fields:
-            'id,message,created_time,type,permalink_url,link,story,attachments',
+          fields: 'id,message,created_time',
           since: sinceTimestamp,
           limit: 100,
         },
       });
 
       return response.data.data || [];
-    } catch (error) {
-      throw new Error(`Failed to fetch posts: ${error.message}`);
+    } catch (error: unknown) {
+      const axiosError = error as {
+        message?: string;
+        response?: { status?: number; data?: unknown };
+        config?: { url?: string; params?: Record<string, unknown> };
+      };
+      const status = axiosError.response?.status;
+      const fbError = axiosError.response?.data as
+        | { error?: { message?: string; code?: number; type?: string } }
+        | undefined;
+      const fbMessage = fbError?.error?.message ?? 'unknown';
+      const fbCode = fbError?.error?.code;
+      const fbType = fbError?.error?.type;
+      const url = axiosError.config?.url;
+      const params = axiosError.config?.params
+        ? { ...axiosError.config.params, access_token: '[REDACTED]' }
+        : undefined;
+
+      this.logger.error(
+        `Failed to fetch posts for connection ${connection.id}: ` +
+          `status=${status ?? 'N/A'}, message=${axiosError.message ?? 'unknown'}, ` +
+          `fbError=${fbMessage}, fbCode=${fbCode}, fbType=${fbType}, ` +
+          `url=${url}, params=${JSON.stringify(params)}`,
+      );
+
+      throw new Error(`Failed to fetch posts: ${axiosError.message ?? 'unknown'}`);
     }
   }
 
