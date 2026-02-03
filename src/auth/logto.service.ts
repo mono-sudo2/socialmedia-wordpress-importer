@@ -3,12 +3,18 @@ import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { UserInfo } from '../common/interfaces/user.interface';
 
+interface M2MTokenCache {
+  accessToken: string;
+  expiresAt: number;
+}
+
 @Injectable()
 export class LogtoService {
   private readonly axiosInstance: AxiosInstance;
   private readonly logtoEndpoint: string;
   private readonly appId: string;
   private readonly appSecret: string;
+  private m2mTokenCache: M2MTokenCache | null = null;
 
   constructor(private configService: ConfigService) {
     const endpoint = this.configService.get<string>('logto.endpoint');
@@ -97,5 +103,71 @@ export class LogtoService {
       }
       throw new UnauthorizedException('Failed to validate token');
     }
+  }
+
+  async getM2MAccessToken(): Promise<string> {
+    const now = Date.now();
+    const bufferSeconds = 60;
+    if (
+      this.m2mTokenCache &&
+      this.m2mTokenCache.expiresAt > now + bufferSeconds * 1000
+    ) {
+      return this.m2mTokenCache.accessToken;
+    }
+
+    const resource = `${this.logtoEndpoint.replace(/\/$/, '')}/api`;
+    const tokenResponse = await this.axiosInstance.post(
+      '/oidc/token',
+      new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: this.appId,
+        client_secret: this.appSecret,
+        resource,
+        scope: 'all',
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      },
+    );
+
+    const { access_token, expires_in } = tokenResponse.data;
+    this.m2mTokenCache = {
+      accessToken: access_token,
+      expiresAt: now + expires_in * 1000,
+    };
+    return access_token;
+  }
+
+  async createOrganization(data: {
+    name: string;
+    description?: string;
+  }): Promise<unknown> {
+    const token = await this.getM2MAccessToken();
+    const response = await this.axiosInstance.post(
+      '/api/organizations',
+      data,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+    return response.data;
+  }
+
+  async getUserOrganizations(userId: string): Promise<unknown[]> {
+    const token = await this.getM2MAccessToken();
+    const response = await this.axiosInstance.get(
+      `/api/users/${encodeURIComponent(userId)}/organizations`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    return response.data ?? [];
   }
 }

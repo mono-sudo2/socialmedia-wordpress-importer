@@ -9,6 +9,7 @@ import { FacebookModule } from './facebook/facebook.module';
 import { PostsModule } from './posts/posts.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
+import { OrganizationsModule } from './organizations/organizations.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SchedulerModule } from './scheduler/scheduler.module';
     PostsModule,
     WebhooksModule,
     SchedulerModule,
+    OrganizationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
