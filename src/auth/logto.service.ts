@@ -235,4 +235,81 @@ export class LogtoService {
       },
     );
   }
+
+  async createOrganizationInvitation(data: {
+    invitee: string;
+    organizationId: string;
+    expiresAt: number;
+    inviterId?: string;
+    organizationRoleIds?: string[];
+    messagePayload?: Record<string, unknown> | false;
+  }): Promise<unknown> {
+    const token = await this.getM2MAccessToken();
+    const response = await this.axiosInstance.post(
+      '/api/organization-invitations',
+      data,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+    return response.data;
+  }
+
+  async getOrganizationInvitations(params?: {
+    organizationId?: string;
+    inviterId?: string;
+    invitee?: string;
+  }): Promise<unknown[]> {
+    const token = await this.getM2MAccessToken();
+    const searchParams = new URLSearchParams();
+    if (params?.organizationId) {
+      searchParams.set('organizationId', params.organizationId);
+    }
+    if (params?.inviterId) {
+      searchParams.set('inviterId', params.inviterId);
+    }
+    if (params?.invitee) {
+      searchParams.set('invitee', params.invitee);
+    }
+    const query = searchParams.toString();
+    const url = query
+      ? `/api/organization-invitations?${query}`
+      : '/api/organization-invitations';
+    const response = await this.axiosInstance.get(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data ?? [];
+  }
+
+  async getOrganizationUsers(
+    organizationId: string,
+    params?: { q?: string; page?: number; page_size?: number },
+  ): Promise<unknown> {
+    const token = await this.getM2MAccessToken();
+    const searchParams = new URLSearchParams();
+    if (params?.q) {
+      searchParams.set('q', params.q);
+    }
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.page_size !== undefined) {
+      searchParams.set('page_size', String(params.page_size));
+    }
+    const query = searchParams.toString();
+    const url = query
+      ? `/api/organizations/${encodeURIComponent(organizationId)}/users?${query}`
+      : `/api/organizations/${encodeURIComponent(organizationId)}/users`;
+    const response = await this.axiosInstance.get(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  }
 }

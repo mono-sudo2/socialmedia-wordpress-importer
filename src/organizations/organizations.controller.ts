@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { OrganizationsService } from './organizations.service';
@@ -14,6 +15,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UserInfo } from '../common/interfaces/user.interface';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import { GetOrganizationUsersQueryDto } from './dto/get-organization-users-query.dto';
 
 @Controller('organizations')
 @UseGuards(AuthGuard)
@@ -36,6 +38,27 @@ export class OrganizationsController {
   @Get(':id')
   async getById(@Param('id') id: string, @CurrentUser() user: UserInfo) {
     return this.organizationsService.getById(id, user.userId);
+  }
+
+  @Get(':id/invitations')
+  async getInvitations(
+    @Param('id') id: string,
+    @CurrentUser() user: UserInfo,
+  ) {
+    return this.organizationsService.getInvitations(id, user.userId);
+  }
+
+  @Get(':id/users')
+  async getUsers(
+    @Param('id') id: string,
+    @CurrentUser() user: UserInfo,
+    @Query() query: GetOrganizationUsersQueryDto,
+  ) {
+    return this.organizationsService.getUsers(id, user.userId, {
+      q: query.q,
+      page: query.page,
+      page_size: query.page_size,
+    });
   }
 
   @Patch(':id')

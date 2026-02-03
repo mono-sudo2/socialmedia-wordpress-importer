@@ -80,4 +80,34 @@ export class OrganizationsService {
       throw error;
     }
   }
+
+  async getInvitations(id: string, userId: string) {
+    await this.verifyUserHasAccess(id, userId);
+    try {
+      return await this.logtoService.getOrganizationInvitations({
+        organizationId: id,
+      });
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        throw new NotFoundException('Organization not found');
+      }
+      throw error;
+    }
+  }
+
+  async getUsers(
+    id: string,
+    userId: string,
+    query?: { q?: string; page?: number; page_size?: number },
+  ) {
+    await this.verifyUserHasAccess(id, userId);
+    try {
+      return await this.logtoService.getOrganizationUsers(id, query);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        throw new NotFoundException('Organization not found');
+      }
+      throw error;
+    }
+  }
 }

@@ -10,6 +10,8 @@ import { PostsModule } from './posts/posts.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { OrganizationsModule } from './organizations/organizations.module';
+import { InvitationsModule } from './invitations/invitations.module';
+import { MeModule } from './me/me.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { OrganizationsModule } from './organizations/organizations.module';
     WebhooksModule,
     SchedulerModule,
     OrganizationsModule,
+    InvitationsModule,
+    MeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
