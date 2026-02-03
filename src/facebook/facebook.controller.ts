@@ -10,6 +10,7 @@ import {
 import type { Response, Request } from 'express';
 import { FacebookService } from './facebook.service';
 import { AuthGuard } from '../auth/auth.guard';
+import { RequiresOrganizationGuard } from '../auth/requires-organization.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UserInfo } from '../common/interfaces/user.interface';
 
@@ -18,7 +19,7 @@ export class FacebookController {
   constructor(private readonly facebookService: FacebookService) {}
 
   @Get('auth')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, RequiresOrganizationGuard)
   async initiateAuth(
     @CurrentUser() user: UserInfo,
     @Res() res: Response,
@@ -74,15 +75,15 @@ export class FacebookController {
   }
 
   @Get('status')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, RequiresOrganizationGuard)
   async getStatus(@CurrentUser() user: UserInfo) {
-    return this.facebookService.getConnectionStatus(user.organizationId);
+    return this.facebookService.getConnectionStatus(user.organizationId!);
   }
 
   @Post('disconnect')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, RequiresOrganizationGuard)
   async disconnect(@CurrentUser() user: UserInfo) {
-    await this.facebookService.disconnect(user.organizationId);
+    await this.facebookService.disconnect(user.organizationId!);
     return { message: 'Disconnected successfully' };
   }
 }

@@ -83,15 +83,10 @@ export class LogtoService {
 
       // Logto returns organization_id in the token claims for multi-tenant setups
       const organizationId = userInfo.organization_id || userInfo.org_id;
-      if (!organizationId) {
-        throw new UnauthorizedException(
-          'Invalid token: missing organization ID',
-        );
-      }
 
       return {
         userId: userInfo.sub,
-        organizationId: organizationId,
+        organizationId: organizationId || undefined,
         email: userInfo.email,
       };
     } catch (error) {

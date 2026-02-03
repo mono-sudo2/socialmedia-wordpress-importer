@@ -10,13 +10,14 @@ import {
 } from '@nestjs/common';
 import { WebhooksService } from './webhooks.service';
 import { AuthGuard } from '../auth/auth.guard';
+import { RequiresOrganizationGuard } from '../auth/requires-organization.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UserInfo } from '../common/interfaces/user.interface';
 import { CreateWebhookConfigDto } from './dto/create-webhook-config.dto';
 import { UpdateWebhookConfigDto } from './dto/update-webhook-config.dto';
 
 @Controller('webhooks')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, RequiresOrganizationGuard)
 export class WebhooksController {
   constructor(private readonly webhooksService: WebhooksService) {}
 
@@ -61,10 +62,7 @@ export class WebhooksController {
   }
 
   @Delete('config/:id')
-  async deleteConfig(
-    @Param('id') id: string,
-    @CurrentUser() user: UserInfo,
-  ) {
+  async deleteConfig(@Param('id') id: string, @CurrentUser() user: UserInfo) {
     await this.webhooksService.deleteConfig(id, user);
     return { message: 'Webhook config deleted successfully' };
   }
