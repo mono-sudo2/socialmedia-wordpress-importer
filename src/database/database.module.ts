@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { Organization } from './entities/organization.entity';
-import { User } from './entities/user.entity';
 import { FacebookConnection } from './entities/facebook-connection.entity';
 import { Post } from './entities/post.entity';
 import { WebhookConfig } from './entities/webhook-config.entity';
@@ -15,8 +13,6 @@ import { WebhookConfig } from './entities/webhook-config.entity';
         type: 'postgres',
         url: configService.get<string>('database.url'),
         entities: [
-          Organization,
-          User,
           FacebookConnection,
           Post,
           WebhookConfig,
@@ -27,8 +23,6 @@ import { WebhookConfig } from './entities/webhook-config.entity';
       inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([
-      Organization,
-      User,
       FacebookConnection,
       Post,
       WebhookConfig,

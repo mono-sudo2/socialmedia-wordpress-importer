@@ -3,11 +3,8 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  ManyToOne,
-  JoinColumn,
   OneToMany,
 } from 'typeorm';
-import { Organization } from './organization.entity';
 import { Post } from './post.entity';
 import { WebhookConfig } from './webhook-config.entity';
 
@@ -16,8 +13,8 @@ export class FacebookConnection {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
-  organizationId: string;
+  @Column()
+  logtoOrgId: string;
 
   @Column()
   facebookUserId: string;
@@ -42,10 +39,6 @@ export class FacebookConnection {
 
   @CreateDateColumn()
   createdAt: Date;
-
-  @ManyToOne(() => Organization, (org) => org.facebookConnections)
-  @JoinColumn({ name: 'organizationId' })
-  organization: Organization;
 
   @OneToMany(() => Post, (post) => post.facebookConnection)
   posts: Post[];

@@ -40,7 +40,6 @@ export class FacebookSyncService {
   async syncAllConnections(): Promise<void> {
     const connections = await this.facebookConnectionRepository.find({
       where: { isActive: true },
-      relations: ['organization'],
     });
 
     this.logger.log(`Found ${connections.length} active connections to sync`);
@@ -259,7 +258,7 @@ export class FacebookSyncService {
     }
 
     const post = this.postRepository.create({
-      organizationId: connection.organizationId,
+      logtoOrgId: connection.logtoOrgId,
       facebookConnectionId: connection.id,
       facebookPostId: postData.id,
       content: postData.message || postData.story || '',

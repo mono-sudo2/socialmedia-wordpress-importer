@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import axios, { AxiosInstance } from 'axios';
 import * as crypto from 'crypto';
 import { WebhookConfig } from '../database/entities/webhook-config.entity';
-import { Organization } from '../database/entities/organization.entity';
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
 import { Post } from '../database/entities/post.entity';
 import { EncryptionService } from '../common/encryption.service';
@@ -19,8 +18,6 @@ export class WebhooksService {
   constructor(
     @InjectRepository(WebhookConfig)
     private webhookConfigRepository: Repository<WebhookConfig>,
-    @InjectRepository(Organization)
-    private organizationRepository: Repository<Organization>,
     @InjectRepository(FacebookConnection)
     private facebookConnectionRepository: Repository<FacebookConnection>,
     @InjectRepository(Post)
@@ -41,18 +38,10 @@ export class WebhooksService {
     facebookConnectionId: string,
     userInfo: UserInfo,
   ): Promise<FacebookConnection> {
-    const organization = await this.organizationRepository.findOne({
-      where: { logtoOrgId: userInfo.organizationId },
-    });
-
-    if (!organization) {
-      throw new NotFoundException('Organization not found');
-    }
-
     const connection = await this.facebookConnectionRepository.findOne({
       where: {
         id: facebookConnectionId,
-        organizationId: organization.id,
+        logtoOrgId: userInfo.organizationId,
       },
     });
 

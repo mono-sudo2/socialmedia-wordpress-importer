@@ -7,7 +7,6 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
-import { Organization } from './organization.entity';
 import { FacebookConnection } from './facebook-connection.entity';
 
 @Entity('posts')
@@ -16,8 +15,8 @@ export class Post {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
-  organizationId: string;
+  @Column()
+  logtoOrgId: string;
 
   @Column({ type: 'uuid' })
   facebookConnectionId: string;
@@ -42,10 +41,6 @@ export class Post {
 
   @CreateDateColumn()
   createdAt: Date;
-
-  @ManyToOne(() => Organization, (org) => org.posts)
-  @JoinColumn({ name: 'organizationId' })
-  organization: Organization;
 
   @ManyToOne(() => FacebookConnection, (connection) => connection.posts)
   @JoinColumn({ name: 'facebookConnectionId' })

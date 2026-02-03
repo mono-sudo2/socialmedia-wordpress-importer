@@ -4,12 +4,11 @@ import { ConfigModule } from '@nestjs/config';
 import { FacebookController } from './facebook.controller';
 import { FacebookService } from './facebook.service';
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
-import { Organization } from '../database/entities/organization.entity';
 import { EncryptionService } from '../common/encryption.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([FacebookConnection, Organization]),
+    TypeOrmModule.forFeature([FacebookConnection]),
     ConfigModule,
   ],
   controllers: [FacebookController],

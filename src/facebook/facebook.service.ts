@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
-import { Organization } from '../database/entities/organization.entity';
 import { EncryptionService } from '../common/encryption.service';
 import { UserInfo } from '../common/interfaces/user.interface';
 
@@ -20,8 +19,6 @@ export class FacebookService {
   constructor(
     @InjectRepository(FacebookConnection)
     private facebookConnectionRepository: Repository<FacebookConnection>,
-    @InjectRepository(Organization)
-    private organizationRepository: Repository<Organization>,
     private configService: ConfigService,
     private encryptionService: EncryptionService,
   ) {
@@ -152,25 +149,6 @@ export class FacebookService {
     }
   }
 
-  async findOrCreateOrganization(
-    logtoOrgId: string,
-    orgName?: string,
-  ): Promise<Organization> {
-    let organization = await this.organizationRepository.findOne({
-      where: { logtoOrgId },
-    });
-
-    if (!organization) {
-      organization = this.organizationRepository.create({
-        logtoOrgId,
-        name: orgName || `Organization ${logtoOrgId}`,
-      });
-      await this.organizationRepository.save(organization);
-    }
-
-    return organization;
-  }
-
   async saveConnection(
     userInfo: UserInfo,
     facebookUserId: string,
@@ -178,10 +156,6 @@ export class FacebookService {
     expiresIn: number,
     pageId?: string,
   ): Promise<FacebookConnection> {
-    const organization = await this.findOrCreateOrganization(
-      userInfo.organizationId,
-    );
-
     // Get long-lived token
     const longLived = await this.getLongLivedToken(accessToken);
     const pageAccessToken = pageId
@@ -196,12 +170,12 @@ export class FacebookService {
 
     // Deactivate existing connections
     await this.facebookConnectionRepository.update(
-      { organizationId: organization.id, isActive: true },
+      { logtoOrgId: userInfo.organizationId, isActive: true },
       { isActive: false },
     );
 
     const connection = this.facebookConnectionRepository.create({
-      organizationId: organization.id,
+      logtoOrgId: userInfo.organizationId,
       facebookUserId,
       encryptedAccessToken,
       tokenExpiresAt: expiresAt,
@@ -213,40 +187,27 @@ export class FacebookService {
   }
 
   async getConnectionStatus(
-    organizationId: string,
+    logtoOrgId: string,
   ): Promise<{ connected: boolean; connection?: FacebookConnection }> {
-    const organization = await this.organizationRepository.findOne({
-      where: { logtoOrgId: organizationId },
-      relations: ['facebookConnections'],
+    const connections = await this.facebookConnectionRepository.find({
+      where: { logtoOrgId, isActive: true },
     });
 
-    if (!organization) {
-      return { connected: false };
-    }
-
-    const activeConnection = organization.facebookConnections.find(
-      (conn) => conn.isActive,
-    );
-
     return {
-      connected: !!activeConnection,
-      connection: activeConnection || undefined,
+      connected: connections.length > 0,
+      connection: connections[0] || undefined,
     };
   }
 
-  async disconnect(organizationId: string): Promise<void> {
-    const organization = await this.organizationRepository.findOne({
-      where: { logtoOrgId: organizationId },
-    });
-
-    if (!organization) {
-      throw new NotFoundException('Organization not found');
-    }
-
-    await this.facebookConnectionRepository.update(
-      { organizationId: organization.id, isActive: true },
+  async disconnect(logtoOrgId: string): Promise<void> {
+    const result = await this.facebookConnectionRepository.update(
+      { logtoOrgId, isActive: true },
       { isActive: false },
     );
+
+    if (result.affected === 0) {
+      throw new NotFoundException('No active connection found for organization');
+    }
   }
 
   async getDecryptedAccessToken(
