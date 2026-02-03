@@ -13,7 +13,9 @@ RUN npm ci
 COPY . .
 
 # Build TypeScript project
-RUN npm run build
+RUN npm run build && \
+    ls -la dist/ && \
+    test -f dist/main.js
 
 # Stage 2: Production
 FROM node:20-alpine AS production
