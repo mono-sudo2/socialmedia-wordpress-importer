@@ -163,6 +163,23 @@ export class LogtoService {
     return response.data;
   }
 
+  async addUserToOrganization(
+    organizationId: string,
+    userId: string,
+  ): Promise<void> {
+    const token = await this.getM2MAccessToken();
+    await this.axiosInstance.post(
+      `/api/organizations/${encodeURIComponent(organizationId)}/users`,
+      { userIds: [userId] },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+  }
+
   async getUserOrganizations(userId: string): Promise<unknown[]> {
     const token = await this.getM2MAccessToken();
     const response = await this.axiosInstance.get(
@@ -174,5 +191,48 @@ export class LogtoService {
       },
     );
     return response.data ?? [];
+  }
+
+  async getOrganization(id: string): Promise<unknown> {
+    const token = await this.getM2MAccessToken();
+    const response = await this.axiosInstance.get(
+      `/api/organizations/${encodeURIComponent(id)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    return response.data;
+  }
+
+  async updateOrganization(
+    id: string,
+    data: { name?: string; description?: string },
+  ): Promise<unknown> {
+    const token = await this.getM2MAccessToken();
+    const response = await this.axiosInstance.patch(
+      `/api/organizations/${encodeURIComponent(id)}`,
+      data,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+    return response.data;
+  }
+
+  async deleteOrganization(id: string): Promise<void> {
+    const token = await this.getM2MAccessToken();
+    await this.axiosInstance.delete(
+      `/api/organizations/${encodeURIComponent(id)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
   }
 }
