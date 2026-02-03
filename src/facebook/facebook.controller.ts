@@ -1,19 +1,16 @@
 import {
   Controller,
-  Delete,
   Get,
   Param,
   Patch,
-  Post,
   Body,
   Query,
   UseGuards,
   Res,
 } from '@nestjs/common';
-import type { Response, Request } from 'express';
+import type { Response } from 'express';
 import { FacebookService } from './facebook.service';
 import { AuthGuard } from '../auth/auth.guard';
-import { RequiresOrganizationGuard } from '../auth/requires-organization.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UserInfo } from '../common/interfaces/user.interface';
 import { UpdateFacebookConnectionDto } from './dto/update-facebook-connection.dto';
@@ -21,19 +18,6 @@ import { UpdateFacebookConnectionDto } from './dto/update-facebook-connection.dt
 @Controller('facebook')
 export class FacebookController {
   constructor(private readonly facebookService: FacebookService) {}
-
-  @Get('auth')
-  @UseGuards(AuthGuard, RequiresOrganizationGuard)
-  async initiateAuth(
-    @CurrentUser() user: UserInfo,
-    @Res() res: Response,
-  ): Promise<void> {
-    const state = Buffer.from(
-      JSON.stringify({ organizationId: user.organizationId }),
-    ).toString('base64');
-    const authUrl = this.facebookService.getAuthUrl(state);
-    res.redirect(authUrl);
-  }
 
   @Get('callback')
   async handleCallback(
@@ -78,12 +62,6 @@ export class FacebookController {
     }
   }
 
-  @Get('status')
-  @UseGuards(AuthGuard, RequiresOrganizationGuard)
-  async getStatus(@CurrentUser() user: UserInfo) {
-    return this.facebookService.getConnectionStatus(user.organizationId!);
-  }
-
   @Get('connections/:connectionId/test')
   @UseGuards(AuthGuard)
   async testConnection(
@@ -111,18 +89,5 @@ export class FacebookController {
       user.userId,
       dto,
     );
-  }
-
-  @Delete('connections/:connectionId')
-  @UseGuards(AuthGuard, RequiresOrganizationGuard)
-  async deleteConnection(
-    @Param('connectionId') connectionId: string,
-    @CurrentUser() user: UserInfo,
-  ) {
-    await this.facebookService.deleteConnection(
-      connectionId,
-      user.organizationId!,
-    );
-    return { message: 'Connection removed successfully' };
   }
 }

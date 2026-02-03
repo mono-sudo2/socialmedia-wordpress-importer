@@ -8,7 +8,7 @@ import { WebsiteFacebookConnection } from '../database/entities/website-facebook
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
 import { Post } from '../database/entities/post.entity';
 import { EncryptionService } from '../common/encryption.service';
-import type { UserInfo } from '../common/interfaces/user.interface';
+import { LogtoService } from '../auth/logto.service';
 import { CreateWebsiteDto } from './dto/create-website.dto';
 import { UpdateWebsiteDto } from './dto/update-website.dto';
 
@@ -26,6 +26,7 @@ export class WebsitesService {
     @InjectRepository(Post)
     private postRepository: Repository<Post>,
     private encryptionService: EncryptionService,
+    private logtoService: LogtoService,
   ) {
     this.axiosInstance = axios.create({
       timeout: 10000,
@@ -37,14 +38,29 @@ export class WebsitesService {
     return crypto.createHmac('sha256', authKey).update(payload).digest('hex');
   }
 
+  private async verifyUserHasAccess(
+    organizationId: string,
+    userId: string,
+  ): Promise<void> {
+    const userOrgs = await this.logtoService.getUserOrganizations(userId);
+    const hasAccess = userOrgs.some(
+      (org) => (org as { id: string }).id === organizationId,
+    );
+    if (!hasAccess) {
+      throw new ForbiddenException(
+        'Organization not found or you do not have access to it',
+      );
+    }
+  }
+
   private async validateConnectionAccess(
     facebookConnectionId: string,
-    userInfo: UserInfo,
+    organizationId: string,
   ): Promise<FacebookConnection> {
     const connection = await this.facebookConnectionRepository.findOne({
       where: {
         id: facebookConnectionId,
-        logtoOrgId: userInfo.organizationId,
+        logtoOrgId: organizationId,
       },
     });
 
@@ -57,11 +73,17 @@ export class WebsitesService {
     return connection;
   }
 
-  async createWebsite(userInfo: UserInfo, dto: CreateWebsiteDto): Promise<Website> {
+  async createWebsite(
+    organizationId: string,
+    userId: string,
+    dto: CreateWebsiteDto,
+  ): Promise<Website> {
+    await this.verifyUserHasAccess(organizationId, userId);
+
     const encryptedAuthKey = this.encryptionService.encrypt(dto.authKey);
 
     const website = this.websiteRepository.create({
-      logtoOrgId: userInfo.organizationId,
+      logtoOrgId: organizationId,
       name: dto.name ?? null,
       webhookUrl: dto.webhookUrl,
       encryptedAuthKey,
@@ -71,14 +93,25 @@ export class WebsitesService {
     return await this.websiteRepository.save(website);
   }
 
-  async getWebsites(userInfo: UserInfo): Promise<Website[]> {
+  async getWebsites(
+    organizationId: string,
+    userId: string,
+  ): Promise<Website[]> {
+    await this.verifyUserHasAccess(organizationId, userId);
+
     return await this.websiteRepository.find({
-      where: { logtoOrgId: userInfo.organizationId },
+      where: { logtoOrgId: organizationId },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async getWebsiteById(id: string, userInfo: UserInfo): Promise<Website> {
+  async getWebsiteById(
+    id: string,
+    organizationId: string,
+    userId: string,
+  ): Promise<Website> {
+    await this.verifyUserHasAccess(organizationId, userId);
+
     const website = await this.websiteRepository.findOne({
       where: { id },
     });
@@ -87,7 +120,7 @@ export class WebsitesService {
       throw new NotFoundException('Website not found');
     }
 
-    if (website.logtoOrgId !== userInfo.organizationId) {
+    if (website.logtoOrgId !== organizationId) {
       throw new ForbiddenException(
         'Website not found or does not belong to your organization',
       );
@@ -98,9 +131,10 @@ export class WebsitesService {
 
   async getWebsiteConnections(
     websiteId: string,
-    userInfo: UserInfo,
+    organizationId: string,
+    userId: string,
   ): Promise<FacebookConnection[]> {
-    const website = await this.getWebsiteById(websiteId, userInfo);
+    const website = await this.getWebsiteById(websiteId, organizationId, userId);
 
     const connections = await this.websiteFacebookConnectionRepository.find({
       where: { websiteId },
@@ -112,10 +146,11 @@ export class WebsitesService {
 
   async updateWebsite(
     id: string,
-    userInfo: UserInfo,
+    organizationId: string,
+    userId: string,
     dto: UpdateWebsiteDto,
   ): Promise<Website> {
-    const website = await this.getWebsiteById(id, userInfo);
+    const website = await this.getWebsiteById(id, organizationId, userId);
 
     if (dto.name !== undefined) {
       website.name = dto.name;
@@ -133,8 +168,12 @@ export class WebsitesService {
     return await this.websiteRepository.save(website);
   }
 
-  async deleteWebsite(id: string, userInfo: UserInfo): Promise<void> {
-    await this.getWebsiteById(id, userInfo);
+  async deleteWebsite(
+    id: string,
+    organizationId: string,
+    userId: string,
+  ): Promise<void> {
+    await this.getWebsiteById(id, organizationId, userId);
 
     const result = await this.websiteRepository.delete({ id });
 
@@ -146,10 +185,11 @@ export class WebsitesService {
   async connectToFacebookConnection(
     websiteId: string,
     facebookConnectionId: string,
-    userInfo: UserInfo,
+    organizationId: string,
+    userId: string,
   ): Promise<WebsiteFacebookConnection> {
-    const website = await this.getWebsiteById(websiteId, userInfo);
-    await this.validateConnectionAccess(facebookConnectionId, userInfo);
+    const website = await this.getWebsiteById(websiteId, organizationId, userId);
+    await this.validateConnectionAccess(facebookConnectionId, organizationId);
 
     const existing = await this.websiteFacebookConnectionRepository.findOne({
       where: { websiteId, facebookConnectionId },
@@ -170,10 +210,11 @@ export class WebsitesService {
   async disconnectFromFacebookConnection(
     websiteId: string,
     facebookConnectionId: string,
-    userInfo: UserInfo,
+    organizationId: string,
+    userId: string,
   ): Promise<void> {
-    await this.getWebsiteById(websiteId, userInfo);
-    await this.validateConnectionAccess(facebookConnectionId, userInfo);
+    await this.getWebsiteById(websiteId, organizationId, userId);
+    await this.validateConnectionAccess(facebookConnectionId, organizationId);
 
     const result = await this.websiteFacebookConnectionRepository.delete({
       websiteId,
@@ -261,9 +302,10 @@ export class WebsitesService {
 
   async sendTestWebhook(
     id: string,
-    userInfo: UserInfo,
+    organizationId: string,
+    userId: string,
   ): Promise<{ success: boolean; message: string }> {
-    const website = await this.getWebsiteById(id, userInfo);
+    const website = await this.getWebsiteById(id, organizationId, userId);
 
     if (!website.isActive) {
       return {

@@ -141,4 +141,24 @@ export class OrganizationsService {
       tokenExpiresAt: c.tokenExpiresAt,
     }));
   }
+
+  async getFacebookAuthUrl(
+    organizationId: string,
+    userId: string,
+  ): Promise<string> {
+    await this.verifyUserHasAccess(organizationId, userId);
+    const state = Buffer.from(
+      JSON.stringify({ organizationId }),
+    ).toString('base64');
+    return this.facebookService.getAuthUrl(state);
+  }
+
+  async deleteFacebookConnection(
+    organizationId: string,
+    connectionId: string,
+    userId: string,
+  ): Promise<void> {
+    await this.verifyUserHasAccess(organizationId, userId);
+    await this.facebookService.deleteConnection(connectionId, organizationId);
+  }
 }

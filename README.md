@@ -76,24 +76,28 @@ All endpoints (except `/facebook/callback`) require authentication via Bearer to
 Authorization: Bearer <opaque-access-token>
 ```
 
-### Facebook Endpoints
+### Organization-Scoped Endpoints
 
-- `GET /facebook/auth` - Initiate Facebook OAuth flow (redirects to Facebook)
-- `GET /facebook/callback` - OAuth callback handler
-- `GET /facebook/status` - Get connection status for organization
-- `POST /facebook/disconnect` - Disconnect Facebook account
+All organization-scoped resources are nested under `/organizations/:organizationId/`. The user must have access to the organization (membership is verified via Logto).
 
-### Posts Endpoints
+**Facebook (per organization):**
+- `GET /organizations/:id/facebook/auth` - Initiate Facebook OAuth flow (redirects to Facebook)
+- `GET /organizations/:id/facebook` - Get Facebook connections for organization
+- `DELETE /organizations/:id/facebook/connections/:connectionId` - Disconnect Facebook connection
+- `GET /facebook/connections/:connectionId/test` - Test fetch posts for a connection
+- `PATCH /facebook/connections/:connectionId` - Update connection name
+- `GET /facebook/callback` - OAuth callback handler (no auth, gets org from state)
 
-- `GET /posts` - List posts for organization (query params: `page`, `limit`)
-- `GET /posts/:id` - Get single post by ID
-- `DELETE /posts/:id` - Delete a post
+**Posts (per organization):**
+- `GET /organizations/:id/posts` - List posts (query params: `page`, `limit`)
+- `GET /organizations/:id/posts/:postId` - Get single post
+- `DELETE /organizations/:id/posts/:postId` - Delete a post
 
-### Websites Endpoints
+**Websites (per organization):**
 
 Organizations can create multiple websites. Each website can be connected to one or more Facebook connections (many-to-many). When posts are synced, each connected website receives a webhook.
 
-- `POST /websites` - Create a website
+- `POST /organizations/:id/websites` - Create a website
   ```json
   {
     "name": "My WordPress Site",
@@ -101,19 +105,19 @@ Organizations can create multiple websites. Each website can be connected to one
     "authKey": "your-32-character-minimum-secret-key"
   }
   ```
-- `GET /websites` - List all websites for organization
-- `GET /websites/:id` - Get website details
-- `PUT /websites/:id` - Update website
-- `DELETE /websites/:id` - Delete website
-- `POST /websites/:id/connect` - Connect website to a Facebook connection
+- `GET /organizations/:id/websites` - List all websites for organization
+- `GET /organizations/:id/websites/:websiteId` - Get website details
+- `PUT /organizations/:id/websites/:websiteId` - Update website
+- `DELETE /organizations/:id/websites/:websiteId` - Delete website
+- `POST /organizations/:id/websites/:websiteId/connect` - Connect website to a Facebook connection
   ```json
   {
     "facebookConnectionId": "uuid-of-facebook-connection"
   }
   ```
-- `DELETE /websites/:id/connect/:facebookConnectionId` - Disconnect website from Facebook connection
-- `GET /websites/:id/connections` - Get all Facebook connections for a website
-- `POST /websites/:id/test` - Send a test webhook
+- `DELETE /organizations/:id/websites/:websiteId/connect/:facebookConnectionId` - Disconnect website from Facebook connection
+- `GET /organizations/:id/websites/:websiteId/connections` - Get all Facebook connections for a website
+- `POST /organizations/:id/websites/:websiteId/test` - Send a test webhook
 
 ### Webhook Payload Format
 

@@ -8,7 +8,9 @@ import {
   Param,
   Query,
   UseGuards,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { OrganizationsService } from './organizations.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -38,6 +40,33 @@ export class OrganizationsController {
   @Get(':id')
   async getById(@Param('id') id: string, @CurrentUser() user: UserInfo) {
     return this.organizationsService.getById(id, user.userId);
+  }
+
+  @Get(':id/facebook/auth')
+  async initiateFacebookAuth(
+    @Param('id') id: string,
+    @CurrentUser() user: UserInfo,
+    @Res() res: Response,
+  ) {
+    const authUrl = await this.organizationsService.getFacebookAuthUrl(
+      id,
+      user.userId,
+    );
+    res.redirect(authUrl);
+  }
+
+  @Delete(':id/facebook/connections/:connectionId')
+  async deleteFacebookConnection(
+    @Param('id') id: string,
+    @Param('connectionId') connectionId: string,
+    @CurrentUser() user: UserInfo,
+  ) {
+    await this.organizationsService.deleteFacebookConnection(
+      id,
+      connectionId,
+      user.userId,
+    );
+    return { message: 'Connection removed successfully' };
   }
 
   @Get(':id/facebook')
