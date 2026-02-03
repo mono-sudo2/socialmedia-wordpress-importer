@@ -312,4 +312,48 @@ export class LogtoService {
     });
     return response.data;
   }
+
+  async getOrganizationInvitation(id: string): Promise<unknown> {
+    const token = await this.getM2MAccessToken();
+    const response = await this.axiosInstance.get(
+      `/api/organization-invitations/${encodeURIComponent(id)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    return response.data;
+  }
+
+  async updateOrganizationInvitationStatus(
+    id: string,
+    status: 'Accepted' | 'Revoked',
+  ): Promise<unknown> {
+    const token = await this.getM2MAccessToken();
+    const response = await this.axiosInstance.put(
+      `/api/organization-invitations/${encodeURIComponent(id)}/status`,
+      { status },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+    return response.data;
+  }
+
+  async getUser(userId: string): Promise<unknown> {
+    const token = await this.getM2MAccessToken();
+    const response = await this.axiosInstance.get(
+      `/api/users/${encodeURIComponent(userId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    return response.data;
+  }
 }
