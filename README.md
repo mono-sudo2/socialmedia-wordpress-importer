@@ -23,13 +23,109 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+WordPress Social Media Importer API - A NestJS-based API for importing Facebook posts and sending webhooks to WordPress sites.
 
-## Project setup
+This API provides:
+- Authentication via Logto opaque tokens
+- Facebook OAuth integration for connecting user accounts
+- Automatic periodic fetching of Facebook posts
+- Webhook delivery to user websites with authentication
+- Secure storage of sensitive credentials with encryption
+
+## Features
+
+- **Authentication**: Validates opaque access tokens from Logto and extracts user/organization information
+- **Facebook Integration**: Complete OAuth flow for connecting Facebook accounts and pages
+- **Post Synchronization**: Automatically fetches new Facebook posts every 5 minutes (configurable)
+- **Webhook Delivery**: Sends authenticated webhooks to user-configured endpoints when new posts are found
+- **Secure Storage**: Encrypts Facebook access tokens and webhook auth keys using AES-256-GCM
+
+## Prerequisites
+
+- Node.js (v18 or higher)
+- PostgreSQL database
+- Logto instance (self-hosted or cloud)
+- Facebook App with OAuth configured
+
+## Installation
 
 ```bash
 $ npm install
 ```
+
+## Configuration
+
+See [ENV_SETUP.md](./ENV_SETUP.md) for detailed environment variable configuration.
+
+Create a `.env` file with the following required variables:
+
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/facebook_importer
+ENCRYPTION_KEY=<64-character-hex-key>
+LOGTO_ENDPOINT=https://your-logto-instance.com
+FACEBOOK_APP_ID=your-facebook-app-id
+FACEBOOK_APP_SECRET=your-facebook-app-secret
+FACEBOOK_REDIRECT_URI=http://localhost:3000/facebook/callback
+```
+
+## API Endpoints
+
+### Authentication
+All endpoints (except `/facebook/callback`) require authentication via Bearer token in the Authorization header:
+```
+Authorization: Bearer <opaque-access-token>
+```
+
+### Facebook Endpoints
+
+- `GET /facebook/auth` - Initiate Facebook OAuth flow (redirects to Facebook)
+- `GET /facebook/callback` - OAuth callback handler
+- `GET /facebook/status` - Get connection status for organization
+- `POST /facebook/disconnect` - Disconnect Facebook account
+
+### Posts Endpoints
+
+- `GET /posts` - List posts for organization (query params: `page`, `limit`)
+- `GET /posts/:id` - Get single post by ID
+- `DELETE /posts/:id` - Delete a post
+
+### Webhooks Endpoints
+
+- `POST /webhooks/config` - Create/update webhook configuration
+  ```json
+  {
+    "webhookUrl": "https://your-site.com/webhook"
+  }
+  ```
+- `GET /webhooks/config` - Get current webhook configuration
+- `PUT /webhooks/config` - Update webhook configuration
+- `DELETE /webhooks/config` - Delete webhook configuration
+- `POST /webhooks/test` - Send a test webhook
+
+### Webhook Payload Format
+
+When a new post is detected, the API sends a POST request to the configured webhook URL:
+
+```json
+{
+  "event": "new_post",
+  "timestamp": "2026-02-03T12:00:00Z",
+  "post": {
+    "id": "uuid",
+    "facebookPostId": "123456789",
+    "content": "Post content...",
+    "postType": "status",
+    "metadata": {
+      "permalinkUrl": "https://facebook.com/...",
+      "link": "https://..."
+    },
+    "postedAt": "2026-02-03T10:00:00Z"
+  },
+  "signature": "hmac-sha256-signature"
+}
+```
+
+The signature is generated using HMAC-SHA256 with the webhook auth key. Verify it on your end to ensure authenticity.
 
 ## Compile and run the project
 
