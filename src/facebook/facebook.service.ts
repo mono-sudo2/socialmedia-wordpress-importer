@@ -210,16 +210,25 @@ export class FacebookService {
 
   async updateConnectionName(
     connectionId: string,
-    logtoOrgId: string,
+    userId: string,
     dto: UpdateFacebookConnectionDto,
   ): Promise<FacebookConnection> {
     const connection = await this.facebookConnectionRepository.findOne({
-      where: { id: connectionId, logtoOrgId },
+      where: { id: connectionId },
     });
 
     if (!connection) {
-      throw new NotFoundException(
-        'Facebook connection not found or does not belong to your organization',
+      throw new NotFoundException('Facebook connection not found');
+    }
+
+    const userOrgs = await this.logtoService.getUserOrganizations(userId);
+    const hasAccess = userOrgs.some(
+      (org) => (org as { id: string }).id === connection.logtoOrgId,
+    );
+
+    if (!hasAccess) {
+      throw new ForbiddenException(
+        'You do not have access to this Facebook connection',
       );
     }
 

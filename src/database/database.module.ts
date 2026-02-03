@@ -3,7 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { FacebookConnection } from './entities/facebook-connection.entity';
 import { Post } from './entities/post.entity';
-import { WebhookConfig } from './entities/webhook-config.entity';
+import { Website } from './entities/website.entity';
+import { WebsiteFacebookConnection } from './entities/website-facebook-connection.entity';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { WebhookConfig } from './entities/webhook-config.entity';
         entities: [
           FacebookConnection,
           Post,
-          WebhookConfig,
+          Website,
+          WebsiteFacebookConnection,
         ],
         synchronize: process.env.NODE_ENV !== 'production', // Auto-sync in dev
         logging: process.env.NODE_ENV === 'development',
@@ -25,7 +27,8 @@ import { WebhookConfig } from './entities/webhook-config.entity';
     TypeOrmModule.forFeature([
       FacebookConnection,
       Post,
-      WebhookConfig,
+      Website,
+      WebsiteFacebookConnection,
     ]),
   ],
   exports: [TypeOrmModule],

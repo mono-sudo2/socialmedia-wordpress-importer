@@ -7,7 +7,7 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { FacebookModule } from './facebook/facebook.module';
 import { PostsModule } from './posts/posts.module';
-import { WebhooksModule } from './webhooks/webhooks.module';
+import { WebsitesModule } from './websites/websites.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { InvitationsModule } from './invitations/invitations.module';
@@ -23,7 +23,7 @@ import { MeModule } from './me/me.module';
     AuthModule,
     FacebookModule,
     PostsModule,
-    WebhooksModule,
+    WebsitesModule,
     SchedulerModule,
     OrganizationsModule,
     InvitationsModule,

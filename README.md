@@ -37,8 +37,8 @@ This API provides:
 - **Authentication**: Validates opaque access tokens from Logto and extracts user/organization information
 - **Facebook Integration**: Complete OAuth flow for connecting Facebook accounts and pages
 - **Post Synchronization**: Automatically fetches new Facebook posts every 5 minutes (configurable)
-- **Webhook Delivery**: Sends authenticated webhooks to user-configured endpoints when new posts are found
-- **Secure Storage**: Encrypts Facebook access tokens and webhook auth keys using AES-256-GCM
+- **Websites & Webhooks**: Organizations can create multiple websites, connect them to Facebook connections (many-to-many), and receive authenticated webhooks when new posts are found
+- **Secure Storage**: Encrypts Facebook access tokens and website auth keys using AES-256-GCM
 
 ## Prerequisites
 
@@ -89,18 +89,31 @@ Authorization: Bearer <opaque-access-token>
 - `GET /posts/:id` - Get single post by ID
 - `DELETE /posts/:id` - Delete a post
 
-### Webhooks Endpoints
+### Websites Endpoints
 
-- `POST /webhooks/config` - Create/update webhook configuration
+Organizations can create multiple websites. Each website can be connected to one or more Facebook connections (many-to-many). When posts are synced, each connected website receives a webhook.
+
+- `POST /websites` - Create a website
   ```json
   {
-    "webhookUrl": "https://your-site.com/webhook"
+    "name": "My WordPress Site",
+    "webhookUrl": "https://your-site.com/webhook",
+    "authKey": "your-32-character-minimum-secret-key"
   }
   ```
-- `GET /webhooks/config` - Get current webhook configuration
-- `PUT /webhooks/config` - Update webhook configuration
-- `DELETE /webhooks/config` - Delete webhook configuration
-- `POST /webhooks/test` - Send a test webhook
+- `GET /websites` - List all websites for organization
+- `GET /websites/:id` - Get website details
+- `PUT /websites/:id` - Update website
+- `DELETE /websites/:id` - Delete website
+- `POST /websites/:id/connect` - Connect website to a Facebook connection
+  ```json
+  {
+    "facebookConnectionId": "uuid-of-facebook-connection"
+  }
+  ```
+- `DELETE /websites/:id/connect/:facebookConnectionId` - Disconnect website from Facebook connection
+- `GET /websites/:id/connections` - Get all Facebook connections for a website
+- `POST /websites/:id/test` - Send a test webhook
 
 ### Webhook Payload Format
 

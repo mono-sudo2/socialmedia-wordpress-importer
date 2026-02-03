@@ -6,7 +6,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Post } from './post.entity';
-import { WebhookConfig } from './webhook-config.entity';
+import { WebsiteFacebookConnection } from './website-facebook-connection.entity';
 
 @Entity('facebook_connections')
 export class FacebookConnection {
@@ -46,6 +46,9 @@ export class FacebookConnection {
   @OneToMany(() => Post, (post) => post.facebookConnection)
   posts: Post[];
 
-  @OneToMany(() => WebhookConfig, (config) => config.facebookConnection)
-  webhookConfigs: WebhookConfig[];
+  @OneToMany(
+    () => WebsiteFacebookConnection,
+    (wfc) => wfc.facebookConnection,
+  )
+  websiteConnections: WebsiteFacebookConnection[];
 }

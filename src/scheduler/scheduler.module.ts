@@ -6,7 +6,7 @@ import { FacebookSyncService } from './facebook-sync.service';
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
 import { Post } from '../database/entities/post.entity';
 import { FacebookModule } from '../facebook/facebook.module';
-import { WebhooksModule } from '../webhooks/webhooks.module';
+import { WebsitesModule } from '../websites/websites.module';
 
 @Module({
   imports: [
@@ -14,7 +14,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
     TypeOrmModule.forFeature([FacebookConnection, Post]),
     ConfigModule,
     FacebookModule,
-    WebhooksModule,
+    WebsitesModule,
   ],
   providers: [FacebookSyncService],
 })

@@ -6,7 +6,7 @@ import axios, { AxiosInstance } from 'axios';
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
 import { Post } from '../database/entities/post.entity';
 import { FacebookService } from '../facebook/facebook.service';
-import { WebhooksService } from '../webhooks/webhooks.service';
+import { WebsitesService } from '../websites/websites.service';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -20,7 +20,7 @@ export class FacebookSyncService {
     @InjectRepository(Post)
     private postRepository: Repository<Post>,
     private facebookService: FacebookService,
-    private webhooksService: WebhooksService,
+    private websitesService: WebsitesService,
     private configService: ConfigService,
   ) {
     this.axiosInstance = axios.create({
@@ -282,13 +282,13 @@ export class FacebookSyncService {
 
     const savedPost = await this.postRepository.save(post);
 
-    // Send webhook if configured
+    // Send webhooks to connected websites
     if (!savedPost.webhookSent) {
       try {
-        await this.webhooksService.sendWebhook(savedPost);
+        await this.websitesService.sendWebhooksForPost(savedPost);
       } catch (error) {
         this.logger.error(
-          `Failed to send webhook for post ${savedPost.id}:`,
+          `Failed to send webhooks for post ${savedPost.id}:`,
           error.message,
         );
         // Don't throw - webhook failure shouldn't break the sync

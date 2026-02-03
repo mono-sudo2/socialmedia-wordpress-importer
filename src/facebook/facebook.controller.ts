@@ -100,7 +100,7 @@ export class FacebookController {
   }
 
   @Patch('connections/:connectionId')
-  @UseGuards(AuthGuard, RequiresOrganizationGuard)
+  @UseGuards(AuthGuard)
   async updateConnection(
     @Param('connectionId') connectionId: string,
     @CurrentUser() user: UserInfo,
@@ -108,7 +108,7 @@ export class FacebookController {
   ) {
     return this.facebookService.updateConnectionName(
       connectionId,
-      user.organizationId!,
+      user.userId,
       dto,
     );
   }

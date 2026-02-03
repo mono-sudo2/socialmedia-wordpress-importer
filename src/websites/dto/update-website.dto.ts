@@ -1,6 +1,10 @@
 import { IsUrl, IsOptional, IsBoolean, IsString, MinLength } from 'class-validator';
 
-export class UpdateWebhookConfigDto {
+export class UpdateWebsiteDto {
+  @IsString()
+  @IsOptional()
+  name?: string;
+
   @IsUrl()
   @IsOptional()
   webhookUrl?: string;
