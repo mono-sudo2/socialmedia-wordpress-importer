@@ -37,6 +37,9 @@ export class FacebookConnection {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ nullable: true })
+  name?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

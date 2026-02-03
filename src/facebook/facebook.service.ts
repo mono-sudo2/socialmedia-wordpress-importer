@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
 import { EncryptionService } from '../common/encryption.service';
+import { UpdateFacebookConnectionDto } from './dto/update-facebook-connection.dto';
 import { LogtoService } from '../auth/logto.service';
 import { UserInfo } from '../common/interfaces/user.interface';
 
@@ -205,6 +206,29 @@ export class FacebookService {
       where: { logtoOrgId },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async updateConnectionName(
+    connectionId: string,
+    logtoOrgId: string,
+    dto: UpdateFacebookConnectionDto,
+  ): Promise<FacebookConnection> {
+    const connection = await this.facebookConnectionRepository.findOne({
+      where: { id: connectionId, logtoOrgId },
+    });
+
+    if (!connection) {
+      throw new NotFoundException(
+        'Facebook connection not found or does not belong to your organization',
+      );
+    }
+
+    if (dto.name !== undefined) {
+      connection.name = dto.name;
+      await this.facebookConnectionRepository.save(connection);
+    }
+
+    return connection;
   }
 
   async deleteConnection(

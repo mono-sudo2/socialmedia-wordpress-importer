@@ -3,7 +3,9 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
+  Body,
   Query,
   UseGuards,
   Res,
@@ -14,6 +16,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { RequiresOrganizationGuard } from '../auth/requires-organization.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UserInfo } from '../common/interfaces/user.interface';
+import { UpdateFacebookConnectionDto } from './dto/update-facebook-connection.dto';
 
 @Controller('facebook')
 export class FacebookController {
@@ -93,6 +96,20 @@ export class FacebookController {
       connectionId,
       user.userId,
       sinceTimestamp,
+    );
+  }
+
+  @Patch('connections/:connectionId')
+  @UseGuards(AuthGuard, RequiresOrganizationGuard)
+  async updateConnection(
+    @Param('connectionId') connectionId: string,
+    @CurrentUser() user: UserInfo,
+    @Body() dto: UpdateFacebookConnectionDto,
+  ) {
+    return this.facebookService.updateConnectionName(
+      connectionId,
+      user.organizationId!,
+      dto,
     );
   }
 
