@@ -10,6 +10,7 @@ export default () => ({
     endpoint: process.env.LOGTO_ENDPOINT,
     appId: process.env.LOGTO_APP_ID,
     appSecret: process.env.LOGTO_APP_SECRET,
+    apiResource: process.env.LOGTO_API_RESOURCE,
   },
   facebook: {
     appId: process.env.FACEBOOK_APP_ID,

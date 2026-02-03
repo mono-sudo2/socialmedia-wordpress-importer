@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { UserInfo } from '../common/interfaces/user.interface';
@@ -10,6 +10,7 @@ interface M2MTokenCache {
 
 @Injectable()
 export class LogtoService {
+  private readonly logger = new Logger(LogtoService.name);
   private readonly axiosInstance: AxiosInstance;
   private readonly logtoEndpoint: string;
   private readonly appId: string;
@@ -43,37 +44,18 @@ export class LogtoService {
 
   async validateToken(accessToken: string): Promise<UserInfo> {
     try {
-      // First, introspect the token using M2M credentials
-      const introspectionResponse = await this.axiosInstance.post(
-        '/oidc/token/introspection',
-        new URLSearchParams({
-          token: accessToken,
-          token_type_hint: 'access_token',
-        }),
+      const apiResource =
+        this.configService.get<string>('logto.apiResource') ??
+        `${this.logtoEndpoint.replace(/\/$/, '')}/api`;
+
+      const userInfoResponse = await this.axiosInstance.get(
+        `/oidc/me?resource=${encodeURIComponent(apiResource)}`,
         {
-          auth: {
-            username: this.appId,
-            password: this.appSecret,
-          },
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: `Bearer ${accessToken}`,
           },
         },
       );
-
-      const introspection = introspectionResponse.data;
-
-      // Check if token is active
-      if (!introspection.active) {
-        throw new UnauthorizedException('Token is not active or has expired');
-      }
-
-      // Get user info using the validated token
-      const userInfoResponse = await this.axiosInstance.get('/oidc/userinfo', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
 
       const userInfo = userInfoResponse.data;
 
@@ -89,14 +71,42 @@ export class LogtoService {
         organizationId: organizationId || undefined,
         email: userInfo.email,
       };
-    } catch (error) {
-      if (error.response?.status === 401) {
+    } catch (error: unknown) {
+      const axiosError = error as {
+        response?: { status?: number; data?: unknown };
+        message?: string;
+        code?: string;
+      };
+      const status = axiosError.response?.status;
+      const responseData = axiosError.response?.data as
+        | Record<string, string>
+        | undefined;
+      const logtoMessage =
+        responseData?.error_description ??
+        responseData?.message ??
+        responseData?.error;
+
+      this.logger.warn(
+        `Token validation failed - status=${status ?? 'N/A'}, ` +
+          `message=${axiosError.message ?? 'unknown'}, ` +
+          `code=${axiosError.code ?? 'N/A'}, ` +
+          `logto=${logtoMessage ?? 'N/A'}`,
+      );
+
+      if (status === 401) {
         throw new UnauthorizedException('Invalid or expired token');
       }
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      throw new UnauthorizedException('Failed to validate token');
+
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      const clientMessage =
+        isDevelopment && logtoMessage
+          ? `Failed to validate token: ${logtoMessage}`
+          : 'Failed to validate token';
+
+      throw new UnauthorizedException(clientMessage);
     }
   }
 
@@ -110,16 +120,20 @@ export class LogtoService {
       return this.m2mTokenCache.accessToken;
     }
 
-    const resource = `${this.logtoEndpoint.replace(/\/$/, '')}/api`;
+    const apiResource =
+      this.configService.get<string>('logto.apiResource') ??
+      `${this.logtoEndpoint.replace(/\/$/, '')}/api`;
+
     const tokenResponse = await this.axiosInstance.post(
       '/oidc/token',
       new URLSearchParams({
         grant_type: 'client_credentials',
         client_id: this.appId,
         client_secret: this.appSecret,
-        resource,
+        resource: apiResource,
         scope: 'all',
       }),
+
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -140,16 +154,12 @@ export class LogtoService {
     description?: string;
   }): Promise<unknown> {
     const token = await this.getM2MAccessToken();
-    const response = await this.axiosInstance.post(
-      '/api/organizations',
-      data,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+    const response = await this.axiosInstance.post('/api/organizations', data, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
-    );
+    });
     return response.data;
   }
 

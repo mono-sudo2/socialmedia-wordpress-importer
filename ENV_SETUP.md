@@ -18,6 +18,7 @@ ENCRYPTION_KEY=your-64-character-hex-encryption-key-here
 LOGTO_ENDPOINT=https://your-logto-instance.com
 LOGTO_APP_ID=your-logto-app-id
 LOGTO_APP_SECRET=your-logto-app-secret
+# LOGTO_API_RESOURCE (optional): Resource indicator for M2M tokens and userinfo. Must match an API resource in Logto. Default: {LOGTO_ENDPOINT}/api. Override if your Logto uses a different resource (e.g. https://default.logto.app/api).
 
 # Facebook OAuth Configuration
 FACEBOOK_APP_ID=your-facebook-app-id
@@ -76,4 +77,4 @@ The application will automatically create the necessary tables on first run (in 
 4. Configure the application to allow token introspection
 5. Copy the **Endpoint URL**, **Application ID**, and **Application Secret** to your `.env` file
 
-**Note:** The API uses token introspection with M2M credentials to validate opaque access tokens. Make sure your Logto application is configured for machine-to-machine authentication.
+**Note:** The API validates access tokens via Logto's userinfo endpoint. Make sure your Logto application is configured for machine-to-machine authentication. If you use a custom API resource for token validation, set `LOGTO_API_RESOURCE` to match the resource indicator registered in Logto Console (API resources).
