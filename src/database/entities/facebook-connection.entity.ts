@@ -28,7 +28,7 @@ export class FacebookConnection {
   @Column({ nullable: true })
   tokenExpiresAt: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   pageId: string | null;
 
   @Column({ nullable: true })
