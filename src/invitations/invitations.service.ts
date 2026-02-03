@@ -55,6 +55,11 @@ export class InvitationsService {
     return this.logtoService.getOrganizationInvitations({ inviterId });
   }
 
+  async getByInvitee(user: UserInfo) {
+    const email = await this.resolveUserEmail(user);
+    return this.logtoService.getOrganizationInvitations({ invitee: email });
+  }
+
   private async getInvitationOrThrow(id: string) {
     try {
       return (await this.logtoService.getOrganizationInvitation(id)) as {
