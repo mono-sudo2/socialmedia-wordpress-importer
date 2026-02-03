@@ -1,11 +1,12 @@
 import {
   Controller,
+  Delete,
   Get,
+  Param,
   Post,
   Query,
   UseGuards,
   Res,
-  Req,
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { FacebookService } from './facebook.service';
@@ -80,10 +81,31 @@ export class FacebookController {
     return this.facebookService.getConnectionStatus(user.organizationId!);
   }
 
-  @Post('disconnect')
+  @Get('connections/:connectionId/test')
   @UseGuards(AuthGuard, RequiresOrganizationGuard)
-  async disconnect(@CurrentUser() user: UserInfo) {
-    await this.facebookService.disconnect(user.organizationId!);
-    return { message: 'Disconnected successfully' };
+  async testConnection(
+    @Param('connectionId') connectionId: string,
+    @Query('since') since: string | undefined,
+    @CurrentUser() user: UserInfo,
+  ) {
+    const sinceTimestamp = since ? parseInt(since, 10) : undefined;
+    return this.facebookService.fetchPostsForConnection(
+      connectionId,
+      user.organizationId!,
+      sinceTimestamp,
+    );
+  }
+
+  @Delete('connections/:connectionId')
+  @UseGuards(AuthGuard, RequiresOrganizationGuard)
+  async deleteConnection(
+    @Param('connectionId') connectionId: string,
+    @CurrentUser() user: UserInfo,
+  ) {
+    await this.facebookService.deleteConnection(
+      connectionId,
+      user.organizationId!,
+    );
+    return { message: 'Connection removed successfully' };
   }
 }

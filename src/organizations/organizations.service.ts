@@ -4,13 +4,17 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { LogtoService } from '../auth/logto.service';
+import { FacebookService } from '../facebook/facebook.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import axios from 'axios';
 
 @Injectable()
 export class OrganizationsService {
-  constructor(private readonly logtoService: LogtoService) {}
+  constructor(
+    private readonly logtoService: LogtoService,
+    private readonly facebookService: FacebookService,
+  ) {}
 
   private async verifyUserHasAccess(
     organizationId: string,
@@ -109,5 +113,32 @@ export class OrganizationsService {
       }
       throw error;
     }
+  }
+
+  async getFacebookConnections(
+    id: string,
+    userId: string,
+  ): Promise<
+    Array<{
+      id: string;
+      facebookUserId: string;
+      pageId: string | null;
+      isActive: boolean;
+      createdAt: Date;
+      lastSyncAt: Date | null;
+      tokenExpiresAt: Date | null;
+    }>
+  > {
+    await this.verifyUserHasAccess(id, userId);
+    const connections = await this.facebookService.getConnections(id);
+    return connections.map((c) => ({
+      id: c.id,
+      facebookUserId: c.facebookUserId,
+      pageId: c.pageId,
+      isActive: c.isActive,
+      createdAt: c.createdAt,
+      lastSyncAt: c.lastSyncAt,
+      tokenExpiresAt: c.tokenExpiresAt,
+    }));
   }
 }

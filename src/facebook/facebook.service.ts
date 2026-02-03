@@ -168,12 +168,6 @@ export class FacebookService {
     const expiresAt = new Date();
     expiresAt.setSeconds(expiresAt.getSeconds() + longLived.expiresIn);
 
-    // Deactivate existing connections
-    await this.facebookConnectionRepository.update(
-      { logtoOrgId: userInfo.organizationId, isActive: true },
-      { isActive: false },
-    );
-
     const connection = this.facebookConnectionRepository.create({
       logtoOrgId: userInfo.organizationId,
       facebookUserId,
@@ -199,14 +193,88 @@ export class FacebookService {
     };
   }
 
-  async disconnect(logtoOrgId: string): Promise<void> {
-    const result = await this.facebookConnectionRepository.update(
-      { logtoOrgId, isActive: true },
+  async getConnections(logtoOrgId: string): Promise<FacebookConnection[]> {
+    return this.facebookConnectionRepository.find({
+      where: { logtoOrgId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async deleteConnection(
+    connectionId: string,
+    logtoOrgId: string,
+  ): Promise<void> {
+    const connection = await this.facebookConnectionRepository.findOne({
+      where: { id: connectionId, logtoOrgId },
+    });
+
+    if (!connection) {
+      throw new NotFoundException(
+        'Facebook connection not found or does not belong to your organization',
+      );
+    }
+
+    await this.facebookConnectionRepository.update(
+      { id: connectionId },
       { isActive: false },
     );
+  }
 
-    if (result.affected === 0) {
-      throw new NotFoundException('No active connection found for organization');
+  async fetchPostsForConnection(
+    connectionId: string,
+    logtoOrgId: string,
+    since?: number,
+  ): Promise<Array<Record<string, unknown>>> {
+    const connection = await this.facebookConnectionRepository.findOne({
+      where: { id: connectionId, logtoOrgId },
+    });
+
+    if (!connection) {
+      throw new NotFoundException(
+        'Facebook connection not found or does not belong to your organization',
+      );
+    }
+
+    if (this.shouldRefreshToken(connection)) {
+      try {
+        await this.refreshConnectionToken(connection);
+        const updatedConnection = await this.facebookConnectionRepository.findOne({
+          where: { id: connection.id },
+        });
+        if (updatedConnection) {
+          Object.assign(connection, updatedConnection);
+        }
+      } catch (refreshError: unknown) {
+        const status = (refreshError as { response?: { status?: number } })
+          ?.response?.status;
+        if (status === 401 || status === 403) {
+          throw refreshError;
+        }
+        this.logger.warn(
+          `Token refresh failed for connection ${connection.id}, attempting fetch with existing token`,
+        );
+      }
+    }
+
+    const accessToken = await this.getDecryptedAccessToken(connection);
+    const targetId = connection.pageId || connection.facebookUserId;
+    const sinceTimestamp =
+      since ?? Math.floor(Date.now() / 1000) - 86400; // Default: last 24 hours
+
+    try {
+      const response = await this.axiosInstance.get(`/${targetId}/posts`, {
+        params: {
+          access_token: accessToken,
+          fields:
+            'id,message,created_time,type,permalink_url,link,story,attachments',
+          since: sinceTimestamp,
+          limit: 100,
+        },
+      });
+
+      return response.data.data || [];
+    } catch (error) {
+      throw new Error(`Failed to fetch posts: ${error.message}`);
     }
   }
 

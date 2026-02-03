@@ -40,6 +40,14 @@ export class OrganizationsController {
     return this.organizationsService.getById(id, user.userId);
   }
 
+  @Get(':id/facebook')
+  async getFacebookConnections(
+    @Param('id') id: string,
+    @CurrentUser() user: UserInfo,
+  ) {
+    return this.organizationsService.getFacebookConnections(id, user.userId);
+  }
+
   @Get(':id/invitations')
   async getInvitations(
     @Param('id') id: string,
