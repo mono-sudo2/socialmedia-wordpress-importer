@@ -15,7 +15,7 @@ COPY . .
 # Build TypeScript project
 RUN npm run build && \
     ls -la dist/ && \
-    test -f dist/main.js
+    test -f dist/src/main.js
 
 # Stage 2: Production
 FROM node:20-alpine AS production
@@ -42,4 +42,4 @@ USER nestjs
 
 EXPOSE 3000
 
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main"]
