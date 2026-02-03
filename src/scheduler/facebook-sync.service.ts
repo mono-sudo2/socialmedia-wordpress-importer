@@ -7,7 +7,6 @@ import { FacebookConnection } from '../database/entities/facebook-connection.ent
 import { Post } from '../database/entities/post.entity';
 import { FacebookService } from '../facebook/facebook.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
-import { EncryptionService } from '../common/encryption.service';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -22,7 +21,6 @@ export class FacebookSyncService {
     private postRepository: Repository<Post>,
     private facebookService: FacebookService,
     private webhooksService: WebhooksService,
-    private encryptionService: EncryptionService,
     private configService: ConfigService,
   ) {
     this.axiosInstance = axios.create({
