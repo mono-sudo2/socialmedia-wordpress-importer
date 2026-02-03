@@ -1,0 +1,44 @@
+# Dependencies (installed in container)
+node_modules
+
+# Build output (built in container)
+dist
+build
+
+# Version control
+.git
+.gitignore
+
+# Environment files (inject at runtime)
+.env
+.env.*
+!.env.example
+
+# Tests
+coverage
+.nyc_output
+*.spec.ts
+test
+
+# Documentation
+*.md
+!README.md
+
+# Logs and cache
+logs
+*.log
+npm-debug.log*
+.npm
+.cache
+
+# IDE and OS
+.idea
+.vscode
+.DS_Store
+*.sublime-workspace
+
+# Temp files
+.temp
+.tmp
+*.pid
+*.seed
