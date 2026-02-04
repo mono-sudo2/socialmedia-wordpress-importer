@@ -333,6 +333,11 @@ export class FacebookSyncService {
       savedPost = await this.postRepository.save(post);
     }
 
+    // Transform attachments into simplified structure
+    const transformedAttachments = this.facebookService.transformAttachments(
+      attachments,
+    );
+
     const postPayload = {
       content: postData.message || postData.story || '',
       postType: postData.type || 'status',
@@ -340,8 +345,9 @@ export class FacebookSyncService {
         permalinkUrl: postData.permalink_url,
         link: postData.link,
         story: postData.story,
-        attachments,
       },
+      attachments:
+        transformedAttachments.length > 0 ? transformedAttachments : null,
       postedAt: savedPost.postedAt,
     };
 

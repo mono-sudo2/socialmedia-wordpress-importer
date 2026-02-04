@@ -22,6 +22,14 @@ export interface PostWebhookPayload {
   content: string;
   postType: string;
   metadata: Record<string, unknown> | null;
+  attachments: Array<{
+    url: string;
+    width?: number;
+    height?: number;
+    type: string;
+    facebookId?: string;
+    facebookUrl?: string;
+  }> | null;
   postedAt: Date;
 }
 
@@ -336,7 +344,7 @@ export class WebsitesService {
         content: postPayload.content,
         postType: postPayload.postType,
         metadata: postPayload.metadata,
-        attachments: postPayload.metadata?.attachments || null,
+        attachments: postPayload.attachments || null,
         postedAt: postPayload.postedAt.toISOString(),
       },
     };

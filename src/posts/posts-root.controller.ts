@@ -41,12 +41,22 @@ export class PostsRootController {
         post.facebookPostId,
         user.userId,
       );
+    
+    // Transform attachments into simplified structure
+    const transformedAttachments = this.facebookService.transformAttachments(
+      attachments,
+    );
+    
+    // Exclude attachments from metadata if present
+    const { attachments: _, ...metadataWithoutAttachments } =
+      (fbPost.metadata as Record<string, unknown>) || {};
+    
     const postPayload = {
       content: (fbPost.message as string) || (fbPost.story as string) || '',
       postType: (fbPost.type as string) || 'status',
-      metadata: (fbPost.metadata as Record<string, unknown>) || {
-        attachments,
-      },
+      metadata: metadataWithoutAttachments,
+      attachments:
+        transformedAttachments.length > 0 ? transformedAttachments : null,
       postedAt: post.postedAt,
     };
     const deliveries =

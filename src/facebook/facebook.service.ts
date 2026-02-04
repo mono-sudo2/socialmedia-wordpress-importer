@@ -564,6 +564,79 @@ export class FacebookService {
     }
   }
 
+  /**
+   * Transforms Facebook attachments structure into a simplified array of images.
+   * Handles albums with subattachments and single attachments.
+   */
+  transformAttachments(attachments: { data: unknown[] } | null): Array<{
+    url: string;
+    width?: number;
+    height?: number;
+    type: string;
+    facebookId?: string;
+    facebookUrl?: string;
+  }> {
+    if (!attachments?.data || !Array.isArray(attachments.data)) {
+      return [];
+    }
+
+    const images: Array<{
+      url: string;
+      width?: number;
+      height?: number;
+      type: string;
+      facebookId?: string;
+      facebookUrl?: string;
+    }> = [];
+
+    for (const attachment of attachments.data) {
+      const att = attachment as {
+        type?: string;
+        subattachments?: { data?: unknown[] };
+        media?: { image?: { src?: string; width?: number; height?: number } };
+        target?: { id?: string; url?: string };
+        url?: string;
+      };
+
+      // If attachment has subattachments (like albums), extract those
+      if (att.subattachments?.data && Array.isArray(att.subattachments.data)) {
+        for (const subAtt of att.subattachments.data) {
+          const sub = subAtt as {
+            media?: {
+              image?: { src?: string; width?: number; height?: number };
+            };
+            target?: { id?: string; url?: string };
+            type?: string;
+            url?: string;
+          };
+
+          if (sub.media?.image?.src) {
+            images.push({
+              url: sub.media.image.src,
+              width: sub.media.image.width,
+              height: sub.media.image.height,
+              type: sub.type || 'photo',
+              facebookId: sub.target?.id,
+              facebookUrl: sub.url || sub.target?.url,
+            });
+          }
+        }
+      } else if (att.media?.image?.src) {
+        // Single attachment without subattachments
+        images.push({
+          url: att.media.image.src,
+          width: att.media.image.width,
+          height: att.media.image.height,
+          type: att.type || 'photo',
+          facebookId: att.target?.id,
+          facebookUrl: att.url || att.target?.url,
+        });
+      }
+    }
+
+    return images;
+  }
+
   async getSinglePostWithAttachments(
     connectionId: string,
     facebookPostId: string,
