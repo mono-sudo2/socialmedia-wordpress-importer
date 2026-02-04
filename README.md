@@ -93,10 +93,12 @@ All organization-scoped resources are nested under `/organizations/:organization
 - `GET /organizations/:id/posts/:postId` - Get single post
 - `DELETE /organizations/:id/posts/:postId` - Delete a post
 
-**Websites (per organization):**
+**Websites:**
 
 Organizations can create multiple websites. Each website can be connected to one or more Facebook connections (many-to-many). When posts are synced, each connected website receives a webhook.
 
+List and create are under organizations:
+- `GET /organizations/:id/websites` - List all websites for organization
 - `POST /organizations/:id/websites` - Create a website
   ```json
   {
@@ -105,19 +107,20 @@ Organizations can create multiple websites. Each website can be connected to one
     "authKey": "your-32-character-minimum-secret-key"
   }
   ```
-- `GET /organizations/:id/websites` - List all websites for organization
-- `GET /organizations/:id/websites/:websiteId` - Get website details
-- `PUT /organizations/:id/websites/:websiteId` - Update website
-- `DELETE /organizations/:id/websites/:websiteId` - Delete website
-- `POST /organizations/:id/websites/:websiteId/connect` - Connect website to a Facebook connection
+
+All other website operations are at /websites:
+- `GET /websites/:id` - Get website details
+- `PUT /websites/:id` - Update website
+- `DELETE /websites/:id` - Delete website
+- `POST /websites/:id/connect` - Connect website to a Facebook connection
   ```json
   {
     "facebookConnectionId": "uuid-of-facebook-connection"
   }
   ```
-- `DELETE /organizations/:id/websites/:websiteId/connect/:facebookConnectionId` - Disconnect website from Facebook connection
-- `GET /organizations/:id/websites/:websiteId/connections` - Get all Facebook connections for a website
-- `POST /organizations/:id/websites/:websiteId/test` - Send a test webhook
+- `DELETE /websites/:id/connect/:facebookConnectionId` - Disconnect website from Facebook connection
+- `GET /websites/:id/connections` - Get all Facebook connections for a website
+- `POST /websites/:id/test` - Send a test webhook
 
 ### Webhook Payload Format
 

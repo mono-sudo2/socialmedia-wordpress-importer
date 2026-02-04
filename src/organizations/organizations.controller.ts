@@ -18,11 +18,16 @@ import type { UserInfo } from '../common/interfaces/user.interface';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { GetOrganizationUsersQueryDto } from './dto/get-organization-users-query.dto';
+import { WebsitesService } from '../websites/websites.service';
+import { CreateWebsiteDto } from '../websites/dto/create-website.dto';
 
 @Controller('organizations')
 @UseGuards(AuthGuard)
 export class OrganizationsController {
-  constructor(private readonly organizationsService: OrganizationsService) {}
+  constructor(
+    private readonly organizationsService: OrganizationsService,
+    private readonly websitesService: WebsitesService,
+  ) {}
 
   @Post()
   async create(
@@ -67,6 +72,30 @@ export class OrganizationsController {
       user.userId,
     );
     return { message: 'Connection removed successfully' };
+  }
+
+  @Get(':id/websites')
+  async getWebsites(@Param('id') id: string, @CurrentUser() user: UserInfo) {
+    const websites = await this.websitesService.getWebsites(id, user.userId);
+    return websites.map((w) => {
+      const { encryptedAuthKey, ...rest } = w;
+      return rest;
+    });
+  }
+
+  @Post(':id/websites')
+  async createWebsite(
+    @Param('id') id: string,
+    @CurrentUser() user: UserInfo,
+    @Body() dto: CreateWebsiteDto,
+  ) {
+    const website = await this.websitesService.createWebsite(
+      id,
+      user.userId,
+      dto,
+    );
+    const { encryptedAuthKey, ...rest } = website;
+    return rest;
   }
 
   @Get(':id/facebook')

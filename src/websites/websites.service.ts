@@ -105,13 +105,7 @@ export class WebsitesService {
     });
   }
 
-  async getWebsiteById(
-    id: string,
-    organizationId: string,
-    userId: string,
-  ): Promise<Website> {
-    await this.verifyUserHasAccess(organizationId, userId);
-
+  async getWebsiteById(id: string, userId: string): Promise<Website> {
     const website = await this.websiteRepository.findOne({
       where: { id },
     });
@@ -120,21 +114,15 @@ export class WebsitesService {
       throw new NotFoundException('Website not found');
     }
 
-    if (website.logtoOrgId !== organizationId) {
-      throw new ForbiddenException(
-        'Website not found or does not belong to your organization',
-      );
-    }
-
+    await this.verifyUserHasAccess(website.logtoOrgId, userId);
     return website;
   }
 
   async getWebsiteConnections(
     websiteId: string,
-    organizationId: string,
     userId: string,
   ): Promise<FacebookConnection[]> {
-    const website = await this.getWebsiteById(websiteId, organizationId, userId);
+    const website = await this.getWebsiteById(websiteId, userId);
 
     const connections = await this.websiteFacebookConnectionRepository.find({
       where: { websiteId },
@@ -146,11 +134,10 @@ export class WebsitesService {
 
   async updateWebsite(
     id: string,
-    organizationId: string,
     userId: string,
     dto: UpdateWebsiteDto,
   ): Promise<Website> {
-    const website = await this.getWebsiteById(id, organizationId, userId);
+    const website = await this.getWebsiteById(id, userId);
 
     if (dto.name !== undefined) {
       website.name = dto.name;
@@ -168,12 +155,8 @@ export class WebsitesService {
     return await this.websiteRepository.save(website);
   }
 
-  async deleteWebsite(
-    id: string,
-    organizationId: string,
-    userId: string,
-  ): Promise<void> {
-    await this.getWebsiteById(id, organizationId, userId);
+  async deleteWebsite(id: string, userId: string): Promise<void> {
+    await this.getWebsiteById(id, userId);
 
     const result = await this.websiteRepository.delete({ id });
 
@@ -185,11 +168,13 @@ export class WebsitesService {
   async connectToFacebookConnection(
     websiteId: string,
     facebookConnectionId: string,
-    organizationId: string,
     userId: string,
   ): Promise<WebsiteFacebookConnection> {
-    const website = await this.getWebsiteById(websiteId, organizationId, userId);
-    await this.validateConnectionAccess(facebookConnectionId, organizationId);
+    const website = await this.getWebsiteById(websiteId, userId);
+    await this.validateConnectionAccess(
+      facebookConnectionId,
+      website.logtoOrgId,
+    );
 
     const existing = await this.websiteFacebookConnectionRepository.findOne({
       where: { websiteId, facebookConnectionId },
@@ -210,11 +195,13 @@ export class WebsitesService {
   async disconnectFromFacebookConnection(
     websiteId: string,
     facebookConnectionId: string,
-    organizationId: string,
     userId: string,
   ): Promise<void> {
-    await this.getWebsiteById(websiteId, organizationId, userId);
-    await this.validateConnectionAccess(facebookConnectionId, organizationId);
+    const website = await this.getWebsiteById(websiteId, userId);
+    await this.validateConnectionAccess(
+      facebookConnectionId,
+      website.logtoOrgId,
+    );
 
     const result = await this.websiteFacebookConnectionRepository.delete({
       websiteId,
@@ -302,10 +289,9 @@ export class WebsitesService {
 
   async sendTestWebhook(
     id: string,
-    organizationId: string,
     userId: string,
   ): Promise<{ success: boolean; message: string }> {
-    const website = await this.getWebsiteById(id, organizationId, userId);
+    const website = await this.getWebsiteById(id, userId);
 
     if (!website.isActive) {
       return {
