@@ -37,7 +37,7 @@ export class FacebookSyncService {
     private configService: ConfigService,
   ) {
     this.axiosInstance = axios.create({
-      baseURL: 'https://graph.facebook.com/v21.0',
+      baseURL: 'https://graph.facebook.com/v18.0',
       timeout: 30000,
     });
   }

@@ -253,8 +253,7 @@ export class WebsitesService {
     }
 
     if (!post.webhookSent) {
-      post.webhookSent = true;
-      await this.postRepository.save(post);
+      await this.postRepository.update({ id: post.id }, { webhookSent: true });
     }
 
     return deliveries;

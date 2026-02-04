@@ -49,7 +49,7 @@ export class FacebookService {
     this.tokenRefreshThresholdDays = tokenRefreshThresholdDays || 7;
 
     this.axiosInstance = axios.create({
-      baseURL: 'https://graph.facebook.com/v21.0',
+      baseURL: 'https://graph.facebook.com/v18.0',
       timeout: 30000,
     });
   }
@@ -63,7 +63,7 @@ export class FacebookService {
       response_type: 'code',
     });
 
-    return `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`;
+    return `https://www.facebook.com/v18.0/dialog/oauth?${params.toString()}`;
   }
 
   async exchangeCodeForToken(code: string): Promise<{
@@ -483,8 +483,8 @@ export class FacebookService {
   }
 
   /**
-   * Fetches attachments for a post. Uses v18.0 for the attachments endpoint
-   * to avoid deprecate_post_aggregated_fields_for_attachement in v3.3+.
+   * Fetches attachments for a post. Uses same v18.0 as other calls to avoid
+   * deprecate_post_aggregated_fields_for_attachement in v3.3+.
    */
   async fetchPostAttachments(
     postId: string,
@@ -493,10 +493,9 @@ export class FacebookService {
     try {
       const allAttachments: unknown[] = [];
       let nextUrl: string | null = null;
-      const attachmentsBaseUrl = 'https://graph.facebook.com/v18.0';
 
       do {
-        const url = nextUrl || `${attachmentsBaseUrl}/${postId}/attachments`;
+        const url = nextUrl || `/${postId}/attachments`;
         const params = nextUrl ? {} : { access_token: accessToken };
 
         const response = nextUrl
