@@ -300,6 +300,18 @@ export class FacebookSyncService {
     connection: FacebookConnection,
     postData: any,
   ): Promise<boolean> {
+    // Filter out cover photo updates
+    const messageContent = postData.message || '';
+    const storyContent = postData.story || '';
+    const coverPhotoText = 'Zoologischer Stadtgarten Karlsruhe hat sein/ihr Titelbild aktualisiert.';
+    
+    if (messageContent.includes(coverPhotoText) || storyContent.includes(coverPhotoText)) {
+      this.logger.debug(
+        `Skipping cover photo update post: ${postData.id}`,
+      );
+      return false; // Post was skipped, not processed
+    }
+
     // Check if post already exists
     const existingPost = await this.postRepository.findOne({
       where: { facebookPostId: postData.id },
