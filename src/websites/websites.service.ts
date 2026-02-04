@@ -420,7 +420,14 @@ export class WebsitesService {
         `[Webhook] Full request payload keys: ${Object.keys(requestPayload).join(', ')}`,
       );
 
-      const response = await this.axiosInstance.post(webhookUrl, requestPayload);
+      this.logger.debug(
+        `[Webhook] Adding X-Auth-Code header with auth key (length: ${authKey.length} characters)`,
+      );
+      const response = await this.axiosInstance.post(webhookUrl, requestPayload, {
+        headers: {
+          'X-Auth-Code': authKey,
+        },
+      });
 
       // Explicitly check status codes
       const statusCode = response.status;
@@ -677,8 +684,15 @@ export class WebsitesService {
       `[TestWebhook] Full request payload: ${JSON.stringify(requestPayload)}`,
     );
 
+    this.logger.debug(
+      `[TestWebhook] Adding X-Auth-Code header with auth key (length: ${authKey.length} characters)`,
+    );
     try {
-      const response = await this.axiosInstance.post(webhookUrl, requestPayload);
+      const response = await this.axiosInstance.post(webhookUrl, requestPayload, {
+        headers: {
+          'X-Auth-Code': authKey,
+        },
+      });
 
       const statusCode = response.status;
       const isSuccess = statusCode >= 200 && statusCode < 300;
