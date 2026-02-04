@@ -123,6 +123,7 @@ export class OrganizationsService {
       id: string;
       facebookUserId: string;
       pageId: string | null;
+      name: string | null;
       isActive: boolean;
       createdAt: Date;
       lastSyncAt: Date | null;
@@ -135,6 +136,7 @@ export class OrganizationsService {
       id: c.id,
       facebookUserId: c.facebookUserId,
       pageId: c.pageId,
+      name: c.name ?? null,
       isActive: c.isActive,
       createdAt: c.createdAt,
       lastSyncAt: c.lastSyncAt,
