@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios, { AxiosInstance } from 'axios';
@@ -22,6 +27,7 @@ export interface PostWebhookPayload {
 
 @Injectable()
 export class WebsitesService {
+  private readonly logger = new Logger(WebsitesService.name);
   private readonly axiosInstance: AxiosInstance;
 
   constructor(
@@ -294,6 +300,11 @@ export class WebsitesService {
 
     const payloadString = JSON.stringify(payload);
     const sentAt = new Date();
+
+    // Log the payload being sent to the endpoint
+    this.logger.log(
+      `Sending webhook payload to ${website.webhookUrl}: ${JSON.stringify(payload, null, 2)}`,
+    );
 
     try {
       const authKey = this.encryptionService.decrypt(website.encryptedAuthKey);
