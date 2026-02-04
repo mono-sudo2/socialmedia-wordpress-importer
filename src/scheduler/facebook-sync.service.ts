@@ -153,12 +153,19 @@ export class FacebookSyncService {
           : Math.floor(Date.now() / 1000) - 86400; // Default to last 24 hours
 
       const fetchLimit = isPaginated ? options!.window! : 100;
+      
+      // Calculate maxPosts needed: offset + limit when pagination options are provided
+      const maxPosts = isPaginated
+        ? (options!.offset ?? 0) + (options!.limit ?? Math.min(10, options!.window! - (options!.offset ?? 0)))
+        : undefined;
+
       let posts = await this.fetchPosts(
         targetId,
         accessToken,
         since,
         !!connection.pageId,
         fetchLimit,
+        maxPosts,
       );
 
       // Apply pagination slice when options provided
@@ -202,22 +209,54 @@ export class FacebookSyncService {
     since: number,
     isPage: boolean,
     limit = 100,
+    maxPosts?: number,
   ): Promise<Array<any>> {
     const endpoint = isPage
       ? `/${targetId}/published_posts`
       : `/${targetId}/feed`;
 
-    try {
-      const response = await this.axiosInstance.get(endpoint, {
-        params: {
-          access_token: accessToken,
-          fields: 'id,message,created_time',
-          since,
-          limit,
-        },
-      });
+    const allPosts: any[] = [];
+    let nextUrl: string | null = null;
+    let pageCount = 0;
 
-      return response.data.data || [];
+    try {
+      do {
+        pageCount++;
+        const response = nextUrl
+          ? await this.axiosInstance.get(nextUrl)
+          : await this.axiosInstance.get(endpoint, {
+              params: {
+                access_token: accessToken,
+                fields: 'id,message,created_time,type,story,link,permalink_url',
+                since,
+                limit,
+              },
+            });
+
+        const posts = response.data.data || [];
+        allPosts.push(...posts);
+
+        this.logger.debug(
+          `Fetched page ${pageCount}: ${posts.length} posts (total: ${allPosts.length})`,
+        );
+
+        // Get next page URL
+        nextUrl = response.data.paging?.next || null;
+
+        // Stop if we have enough posts
+        if (maxPosts && allPosts.length >= maxPosts) {
+          this.logger.log(
+            `Reached maxPosts limit (${maxPosts}), stopping pagination`,
+          );
+          break;
+        }
+      } while (nextUrl && (!maxPosts || allPosts.length < maxPosts));
+
+      this.logger.log(
+        `Fetched ${allPosts.length} posts across ${pageCount} page(s)`,
+      );
+
+      return allPosts;
     } catch (error) {
       throw new Error(`Failed to fetch posts: ${error.message}`);
     }
@@ -232,10 +271,6 @@ export class FacebookSyncService {
       where: { facebookPostId: postData.id },
     });
 
-    if (existingPost) {
-      return false; // Skip if already exists
-    }
-
     // Fetch attachments via dedicated /{post-id}/attachments endpoint
     // (the attachments field on the post is deprecated in API v3.3+)
     const accessToken = await this.facebookService.getDecryptedAccessToken(
@@ -246,15 +281,23 @@ export class FacebookSyncService {
       accessToken,
     );
 
-    const post = this.postRepository.create({
-      logtoOrgId: connection.logtoOrgId,
-      facebookConnectionId: connection.id,
-      facebookPostId: postData.id,
-      postedAt: new Date(postData.created_time),
-      webhookSent: false,
-    });
+    let savedPost: Post;
 
-    const savedPost = await this.postRepository.save(post);
+    if (existingPost) {
+      // Post already exists - use it and still send webhooks
+      savedPost = existingPost;
+    } else {
+      // Create new post
+      const post = this.postRepository.create({
+        logtoOrgId: connection.logtoOrgId,
+        facebookConnectionId: connection.id,
+        facebookPostId: postData.id,
+        postedAt: new Date(postData.created_time),
+        webhookSent: false,
+      });
+
+      savedPost = await this.postRepository.save(post);
+    }
 
     const postPayload = {
       content: postData.message || postData.story || '',
@@ -268,19 +311,19 @@ export class FacebookSyncService {
       postedAt: savedPost.postedAt,
     };
 
-    if (!savedPost.webhookSent) {
-      try {
-        await this.websitesService.sendWebhooksForPostWithPayload(
-          savedPost,
-          postPayload,
-        );
-      } catch (error) {
-        this.logger.error(
-          `Failed to send webhooks for post ${savedPost.id}:`,
-          error.message,
-        );
-      }
+    // Always send webhooks, regardless of whether they've been sent before
+    try {
+      await this.websitesService.sendWebhooksForPostWithPayload(
+        savedPost,
+        postPayload,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send webhooks for post ${savedPost.id}:`,
+        error.message,
+      );
     }
+
     return true;
   }
 }
