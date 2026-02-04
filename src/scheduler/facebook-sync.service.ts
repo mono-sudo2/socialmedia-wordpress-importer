@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -7,7 +12,14 @@ import { FacebookConnection } from '../database/entities/facebook-connection.ent
 import { Post } from '../database/entities/post.entity';
 import { FacebookService } from '../facebook/facebook.service';
 import { WebsitesService } from '../websites/websites.service';
+import { LogtoService } from '../auth/logto.service';
 import { ConfigService } from '@nestjs/config';
+
+export interface SyncOptions {
+  window?: number;
+  offset?: number;
+  limit?: number;
+}
 
 @Injectable()
 export class FacebookSyncService {
@@ -21,6 +33,7 @@ export class FacebookSyncService {
     private postRepository: Repository<Post>,
     private facebookService: FacebookService,
     private websitesService: WebsitesService,
+    private logtoService: LogtoService,
     private configService: ConfigService,
   ) {
     this.axiosInstance = axios.create({
@@ -35,7 +48,7 @@ export class FacebookSyncService {
     await this.syncAllConnections();
   }
 
-  async syncAllConnections(): Promise<void> {
+  async syncAllConnections(): Promise<{ connectionsCount: number }> {
     const connections = await this.facebookConnectionRepository.find({
       where: { isActive: true },
     });
@@ -52,9 +65,43 @@ export class FacebookSyncService {
         );
       }
     }
+
+    return { connectionsCount: connections.length };
   }
 
-  async syncConnection(connection: FacebookConnection): Promise<void> {
+  async syncConnectionById(
+    connectionId: string,
+    userId: string,
+    options?: SyncOptions,
+  ): Promise<{ postsProcessed: number }> {
+    const connection = await this.facebookConnectionRepository.findOne({
+      where: { id: connectionId },
+    });
+
+    if (!connection) {
+      throw new NotFoundException('Facebook connection not found');
+    }
+
+    const userOrgs = await this.logtoService.getUserOrganizations(userId);
+    const hasAccess = userOrgs.some(
+      (org) => (org as { id: string }).id === connection.logtoOrgId,
+    );
+
+    if (!hasAccess) {
+      throw new ForbiddenException(
+        'You do not have access to this Facebook connection',
+      );
+    }
+
+    const postsProcessed = await this.syncConnection(connection, options);
+    return { postsProcessed };
+  }
+
+  async syncConnection(
+    connection: FacebookConnection,
+    options?: SyncOptions,
+  ): Promise<number> {
+    let postsProcessed = 0;
     try {
       // Check if token needs refresh before syncing
       if (this.facebookService.shouldRefreshToken(connection)) {
@@ -96,29 +143,46 @@ export class FacebookSyncService {
       // Determine the target ID (page or user)
       const targetId = connection.pageId || connection.facebookUserId;
 
-      // Fetch posts since last sync
-      const since = connection.lastSyncAt
-        ? Math.floor(connection.lastSyncAt.getTime() / 1000)
-        : Math.floor(Date.now() / 1000) - 86400; // Default to last 24 hours
+      const isPaginated = options?.window != null;
 
-      const posts = await this.fetchPosts(
+      // Fetch posts: paginated uses window + old since; full sync uses lastSyncAt
+      const since = isPaginated
+        ? 0 // Fetch from epoch to get most recent N
+        : connection.lastSyncAt
+          ? Math.floor(connection.lastSyncAt.getTime() / 1000)
+          : Math.floor(Date.now() / 1000) - 86400; // Default to last 24 hours
+
+      const fetchLimit = isPaginated ? options!.window! : 100;
+      let posts = await this.fetchPosts(
         targetId,
         accessToken,
         since,
         !!connection.pageId,
+        fetchLimit,
       );
 
+      // Apply pagination slice when options provided
+      if (isPaginated) {
+        const offset = options!.offset ?? 0;
+        const limit = options!.limit ?? Math.min(10, posts.length - offset);
+        posts = posts.slice(offset, offset + limit);
+      }
+
       this.logger.log(
-        `Found ${posts.length} new posts for connection ${connection.id}`,
+        `Found ${posts.length} posts to process for connection ${connection.id}`,
       );
 
       for (const postData of posts) {
-        await this.savePost(connection, postData);
+        const saved = await this.savePost(connection, postData);
+        if (saved) postsProcessed++;
       }
 
-      // Update last sync time
-      connection.lastSyncAt = new Date();
-      await this.facebookConnectionRepository.save(connection);
+      // Update last sync time only for full sync (not paginated)
+      if (!isPaginated) {
+        connection.lastSyncAt = new Date();
+        await this.facebookConnectionRepository.save(connection);
+      }
+      return postsProcessed;
     } catch (error) {
       // Check if it's a token expiration error
       if (error.response?.status === 401) {
@@ -137,6 +201,7 @@ export class FacebookSyncService {
     accessToken: string,
     since: number,
     isPage: boolean,
+    limit = 100,
   ): Promise<Array<any>> {
     const endpoint = isPage
       ? `/${targetId}/published_posts`
@@ -148,7 +213,7 @@ export class FacebookSyncService {
           access_token: accessToken,
           fields: 'id,message,created_time',
           since,
-          limit: 100,
+          limit,
         },
       });
 
@@ -158,141 +223,64 @@ export class FacebookSyncService {
     }
   }
 
-  private async fetchPostAttachments(
-    postId: string,
-    accessToken: string,
-  ): Promise<any> {
-    try {
-      const allAttachments: any[] = [];
-      let nextUrl: string | null = null;
-
-      // Initial request - fetch attachments without limit
-      do {
-        const url = nextUrl || `/${postId}`;
-        const params = nextUrl
-          ? {} // If using nextUrl, it already contains all params
-          : {
-              access_token: accessToken,
-              fields: 'attachments{subattachments{media}}',
-            };
-
-        const response = nextUrl
-          ? await this.axiosInstance.get(nextUrl)
-          : await this.axiosInstance.get(url, { params });
-
-        const attachments = response.data.attachments?.data || [];
-        
-        // Fetch all subattachments for each attachment
-        for (const attachment of attachments) {
-          if (attachment.subattachments) {
-            attachment.subattachments = await this.fetchAllSubattachments(
-              attachment.subattachments,
-              accessToken,
-            );
-          }
-        }
-
-        allAttachments.push(...attachments);
-
-        // Check for next page
-        nextUrl = response.data.attachments?.paging?.next || null;
-      } while (nextUrl);
-
-      return allAttachments.length > 0 ? { data: allAttachments } : null;
-    } catch (error) {
-      this.logger.warn(
-        `Failed to fetch attachments for post ${postId}: ${error.message}`,
-      );
-      return null;
-    }
-  }
-
-  private async fetchAllSubattachments(
-    subattachments: any,
-    accessToken: string,
-  ): Promise<any> {
-    const allSubattachments: any[] = [];
-    let nextUrl: string | null = null;
-
-    // If subattachments is already a data array (from initial response)
-    if (subattachments.data) {
-      allSubattachments.push(...subattachments.data);
-      nextUrl = subattachments.paging?.next || null;
-    } else if (Array.isArray(subattachments)) {
-      allSubattachments.push(...subattachments);
-    }
-
-    // Fetch all remaining pages
-    while (nextUrl) {
-      try {
-        const response = await this.axiosInstance.get(nextUrl);
-        allSubattachments.push(...(response.data.data || []));
-        nextUrl = response.data.paging?.next || null;
-      } catch (error) {
-        this.logger.warn(
-          `Failed to fetch subattachments page: ${error.message}`,
-        );
-        break;
-      }
-    }
-
-    return { data: allSubattachments };
-  }
-
   private async savePost(
     connection: FacebookConnection,
     postData: any,
-  ): Promise<void> {
+  ): Promise<boolean> {
     // Check if post already exists
     const existingPost = await this.postRepository.findOne({
       where: { facebookPostId: postData.id },
     });
 
     if (existingPost) {
-      return; // Skip if already exists
+      return false; // Skip if already exists
     }
 
-    // Fetch detailed attachments if post has attachments
-    let attachments = null;
-    if (postData.attachments) {
-      const accessToken = await this.facebookService.getDecryptedAccessToken(
-        connection,
-      );
-      attachments = await this.fetchPostAttachments(
-        postData.id,
-        accessToken,
-      );
-    }
+    // Fetch attachments via dedicated /{post-id}/attachments endpoint
+    // (the attachments field on the post is deprecated in API v3.3+)
+    const accessToken = await this.facebookService.getDecryptedAccessToken(
+      connection,
+    );
+    const attachments = await this.facebookService.fetchPostAttachments(
+      postData.id,
+      accessToken,
+    );
 
     const post = this.postRepository.create({
       logtoOrgId: connection.logtoOrgId,
       facebookConnectionId: connection.id,
       facebookPostId: postData.id,
-      content: postData.message || postData.story || '',
-      postType: postData.type || 'status',
-      metadata: {
-        permalinkUrl: postData.permalink_url,
-        link: postData.link,
-        story: postData.story,
-        attachments: attachments,
-      },
       postedAt: new Date(postData.created_time),
       webhookSent: false,
     });
 
     const savedPost = await this.postRepository.save(post);
 
-    // Send webhooks to connected websites
+    const postPayload = {
+      content: postData.message || postData.story || '',
+      postType: postData.type || 'status',
+      metadata: {
+        permalinkUrl: postData.permalink_url,
+        link: postData.link,
+        story: postData.story,
+        attachments,
+      },
+      postedAt: savedPost.postedAt,
+    };
+
     if (!savedPost.webhookSent) {
       try {
-        await this.websitesService.sendWebhooksForPost(savedPost);
+        await this.websitesService.sendWebhooksForPostWithPayload(
+          savedPost,
+          postPayload,
+        );
       } catch (error) {
         this.logger.error(
           `Failed to send webhooks for post ${savedPost.id}:`,
           error.message,
         );
-        // Don't throw - webhook failure shouldn't break the sync
       }
     }
+    return true;
   }
 }

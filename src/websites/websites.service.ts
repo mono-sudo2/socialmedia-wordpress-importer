@@ -7,10 +7,18 @@ import { Website } from '../database/entities/website.entity';
 import { WebsiteFacebookConnection } from '../database/entities/website-facebook-connection.entity';
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
 import { Post } from '../database/entities/post.entity';
+import { WebhookDelivery } from '../database/entities/webhook-delivery.entity';
 import { EncryptionService } from '../common/encryption.service';
 import { LogtoService } from '../auth/logto.service';
 import { CreateWebsiteDto } from './dto/create-website.dto';
 import { UpdateWebsiteDto } from './dto/update-website.dto';
+
+export interface PostWebhookPayload {
+  content: string;
+  postType: string;
+  metadata: Record<string, unknown> | null;
+  postedAt: Date;
+}
 
 @Injectable()
 export class WebsitesService {
@@ -25,6 +33,8 @@ export class WebsitesService {
     private facebookConnectionRepository: Repository<FacebookConnection>,
     @InjectRepository(Post)
     private postRepository: Repository<Post>,
+    @InjectRepository(WebhookDelivery)
+    private webhookDeliveryRepository: Repository<WebhookDelivery>,
     private encryptionService: EncryptionService,
     private logtoService: LogtoService,
   ) {
@@ -226,44 +236,51 @@ export class WebsitesService {
       .filter((w) => w.isActive);
   }
 
-  async sendWebhooksForPost(post: Post): Promise<void> {
+  async sendWebhooksForPostWithPayload(
+    post: Post,
+    postPayload: PostWebhookPayload,
+  ): Promise<WebhookDelivery[]> {
     const websites = await this.getWebsitesForConnection(post.facebookConnectionId);
 
     if (websites.length === 0) {
-      return;
+      return [];
     }
 
-    const sendPromises = websites.map((website) =>
-      this.sendWebhookToWebsite(post, website),
-    );
-
-    await Promise.all(sendPromises);
+    const deliveries: WebhookDelivery[] = [];
+    for (const website of websites) {
+      const delivery = await this.sendWebhookToWebsite(post, website, postPayload);
+      deliveries.push(delivery);
+    }
 
     if (!post.webhookSent) {
       post.webhookSent = true;
       await this.postRepository.save(post);
     }
+
+    return deliveries;
   }
 
   private async sendWebhookToWebsite(
     post: Post,
     website: Website,
-  ): Promise<void> {
+    postPayload: PostWebhookPayload,
+  ): Promise<WebhookDelivery> {
     const payload = {
       event: 'new_post',
       timestamp: new Date().toISOString(),
       post: {
         id: post.id,
         facebookPostId: post.facebookPostId,
-        content: post.content,
-        postType: post.postType,
-        metadata: post.metadata,
-        attachments: post.metadata?.attachments || null,
-        postedAt: post.postedAt.toISOString(),
+        content: postPayload.content,
+        postType: postPayload.postType,
+        metadata: postPayload.metadata,
+        attachments: postPayload.metadata?.attachments || null,
+        postedAt: postPayload.postedAt.toISOString(),
       },
     };
 
     const payloadString = JSON.stringify(payload);
+    const sentAt = new Date();
 
     try {
       const authKey = this.encryptionService.decrypt(website.encryptedAuthKey);
@@ -274,17 +291,36 @@ export class WebsitesService {
         signature,
       });
 
-      if (response.status < 200 || response.status >= 300) {
-        console.error(
-          `Webhook to website ${website.id} for post ${post.id} returned status ${response.status}`,
-        );
-      }
+      const isSuccess = response.status >= 200 && response.status < 300;
+      const delivery = this.webhookDeliveryRepository.create({
+        postId: post.id,
+        websiteId: website.id,
+        website,
+        status: isSuccess ? 'success' : 'failed',
+        statusCode: response.status,
+        errorMessage: isSuccess ? null : `HTTP ${response.status}`,
+        sentAt,
+      });
+      return await this.webhookDeliveryRepository.save(delivery);
     } catch (error) {
-      console.error(
-        `Failed to send webhook to website ${website.id} for post ${post.id}:`,
-        error.message,
-      );
+      const delivery = this.webhookDeliveryRepository.create({
+        postId: post.id,
+        websiteId: website.id,
+        website,
+        status: 'failed',
+        statusCode: null,
+        errorMessage: (error as Error).message,
+        sentAt,
+      });
+      return await this.webhookDeliveryRepository.save(delivery);
     }
+  }
+
+  async resendWebhooksForPostWithPayload(
+    post: Post,
+    postPayload: PostWebhookPayload,
+  ): Promise<WebhookDelivery[]> {
+    return this.sendWebhooksForPostWithPayload(post, postPayload);
   }
 
   async sendTestWebhook(

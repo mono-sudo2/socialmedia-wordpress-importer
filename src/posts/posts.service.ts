@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Post } from '../database/entities/post.entity';
+import { FacebookConnection } from '../database/entities/facebook-connection.entity';
 import { LogtoService } from '../auth/logto.service';
 
 @Injectable()
@@ -13,6 +14,8 @@ export class PostsService {
   constructor(
     @InjectRepository(Post)
     private postRepository: Repository<Post>,
+    @InjectRepository(FacebookConnection)
+    private facebookConnectionRepository: Repository<FacebookConnection>,
     private logtoService: LogtoService,
   ) {}
 
@@ -44,7 +47,7 @@ export class PostsService {
       order: { postedAt: 'DESC' },
       take: limit,
       skip: (page - 1) * limit,
-      relations: ['facebookConnection'],
+      relations: [],
     });
 
     return {
@@ -64,13 +67,59 @@ export class PostsService {
 
     const post = await this.postRepository.findOne({
       where: { id, logtoOrgId: organizationId },
-      relations: ['facebookConnection'],
+      relations: [],
     });
 
     if (!post) {
       throw new NotFoundException('Post not found');
     }
 
+    return post;
+  }
+
+  async findByConnectionId(
+    connectionId: string,
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<{ data: Post[]; total: number; page: number; limit: number }> {
+    const connection = await this.facebookConnectionRepository.findOne({
+      where: { id: connectionId },
+    });
+
+    if (!connection) {
+      throw new NotFoundException('Facebook connection not found');
+    }
+
+    await this.verifyUserHasAccess(connection.logtoOrgId, userId);
+
+    const [data, total] = await this.postRepository.findAndCount({
+      where: { facebookConnectionId: connectionId },
+      order: { postedAt: 'DESC' },
+      take: limit,
+      skip: (page - 1) * limit,
+      relations: ['webhookDeliveries', 'webhookDeliveries.website'],
+    });
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async findOneById(postId: string, userId: string): Promise<Post> {
+    const post = await this.postRepository.findOne({
+      where: { id: postId },
+      relations: ['webhookDeliveries', 'webhookDeliveries.website'],
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    await this.verifyUserHasAccess(post.logtoOrgId, userId);
     return post;
   }
 

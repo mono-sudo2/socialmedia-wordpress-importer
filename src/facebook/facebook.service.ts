@@ -124,7 +124,9 @@ export class FacebookService {
     }
   }
 
-  async getPages(accessToken: string): Promise<Array<{ id: string; name: string }>> {
+  async getPages(
+    accessToken: string,
+  ): Promise<Array<{ id: string; name: string }>> {
     try {
       const response = await this.axiosInstance.get('/me/accounts', {
         params: {
@@ -309,9 +311,10 @@ export class FacebookService {
     if (this.shouldRefreshToken(connection)) {
       try {
         await this.refreshConnectionToken(connection);
-        const updatedConnection = await this.facebookConnectionRepository.findOne({
-          where: { id: connection.id },
-        });
+        const updatedConnection =
+          await this.facebookConnectionRepository.findOne({
+            where: { id: connection.id },
+          });
         if (updatedConnection) {
           Object.assign(connection, updatedConnection);
         }
@@ -329,8 +332,7 @@ export class FacebookService {
 
     const accessToken = await this.getDecryptedAccessToken(connection);
     const targetId = connection.pageId || connection.facebookUserId;
-    const sinceTimestamp =
-      since ?? Math.floor(Date.now() / 1000) - 86400; // Default: last 24 hours
+    const sinceTimestamp = since ?? Math.floor(Date.now() / 1000) - 86400; // Default: last 24 hours
 
     const endpoint = connection.pageId
       ? `/${targetId}/published_posts`
@@ -376,7 +378,9 @@ export class FacebookService {
           `url=${url}, params=${JSON.stringify(params)}`,
       );
 
-      throw new Error(`Failed to fetch posts: ${axiosError.message ?? 'unknown'}`);
+      throw new Error(
+        `Failed to fetch posts: ${axiosError.message ?? 'unknown'}`,
+      );
     }
   }
 
@@ -398,8 +402,7 @@ export class FacebookService {
     // Calculate days until expiration
     const now = new Date();
     const expirationDate = connection.tokenExpiresAt;
-    const millisecondsUntilExpiry =
-      expirationDate.getTime() - now.getTime();
+    const millisecondsUntilExpiry = expirationDate.getTime() - now.getTime();
     const daysUntilExpiry = millisecondsUntilExpiry / (1000 * 60 * 60 * 24);
 
     // Refresh if token expires within threshold or is already expired
@@ -477,5 +480,114 @@ export class FacebookService {
 
       throw error;
     }
+  }
+
+  /**
+   * Fetches attachments for a post. Uses v18.0 for the attachments endpoint
+   * to avoid deprecate_post_aggregated_fields_for_attachement in v3.3+.
+   */
+  async fetchPostAttachments(
+    postId: string,
+    accessToken: string,
+  ): Promise<{ data: unknown[] } | null> {
+    try {
+      const allAttachments: unknown[] = [];
+      let nextUrl: string | null = null;
+      const attachmentsBaseUrl = 'https://graph.facebook.com/v18.0';
+
+      do {
+        const url = nextUrl || `${attachmentsBaseUrl}/${postId}/attachments`;
+        const params = nextUrl ? {} : { access_token: accessToken };
+
+        const response = nextUrl
+          ? await this.axiosInstance.get(nextUrl)
+          : await this.axiosInstance.get(url, { params });
+
+        const attachments = response.data.data || [];
+        allAttachments.push(...attachments);
+        nextUrl = response.data.paging?.next || null;
+      } while (nextUrl);
+
+      return allAttachments.length > 0 ? { data: allAttachments } : null;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to fetch attachments for post ${postId}: ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  async getSinglePostWithAttachments(
+    connectionId: string,
+    facebookPostId: string,
+    userId: string,
+  ): Promise<{
+    post: Record<string, unknown>;
+    attachments: { data: unknown[] } | null;
+  }> {
+    const connection = await this.facebookConnectionRepository.findOne({
+      where: { id: connectionId },
+    });
+
+    if (!connection) {
+      throw new NotFoundException('Facebook connection not found');
+    }
+
+    const userOrgs = await this.logtoService.getUserOrganizations(userId);
+    const hasAccess = userOrgs.some(
+      (org) => (org as { id: string }).id === connection.logtoOrgId,
+    );
+
+    if (!hasAccess) {
+      throw new ForbiddenException(
+        'You do not have access to this Facebook connection',
+      );
+    }
+
+    if (this.shouldRefreshToken(connection)) {
+      try {
+        await this.refreshConnectionToken(connection);
+        const updated = await this.facebookConnectionRepository.findOne({
+          where: { id: connection.id },
+        });
+        if (updated) Object.assign(connection, updated);
+      } catch (refreshError: unknown) {
+        const status = (refreshError as { response?: { status?: number } })
+          ?.response?.status;
+        if (status !== 401 && status !== 403) {
+          this.logger.warn(
+            `Token refresh failed for connection ${connection.id}, attempting fetch with existing token`,
+          );
+        } else {
+          throw refreshError;
+        }
+      }
+    }
+
+    const accessToken = await this.getDecryptedAccessToken(connection);
+
+    const response = await this.axiosInstance.get(`/${facebookPostId}`, {
+      params: {
+        access_token: accessToken,
+        fields: 'id,message,created_time,permalink_url',
+      },
+    });
+
+    const post = response.data as Record<string, unknown>;
+    const attachments = await this.fetchPostAttachments(
+      facebookPostId,
+      accessToken,
+    );
+
+    return {
+      post: {
+        ...post,
+        metadata: {
+          permalinkUrl: post.permalink_url,
+          attachments,
+        },
+      },
+      attachments,
+    };
   }
 }

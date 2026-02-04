@@ -6,6 +6,7 @@ import { Website } from '../database/entities/website.entity';
 import { WebsiteFacebookConnection } from '../database/entities/website-facebook-connection.entity';
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
 import { Post } from '../database/entities/post.entity';
+import { WebhookDelivery } from '../database/entities/webhook-delivery.entity';
 import { EncryptionService } from '../common/encryption.service';
 import { AuthModule } from '../auth/auth.module';
 
@@ -16,6 +17,7 @@ import { AuthModule } from '../auth/auth.module';
       WebsiteFacebookConnection,
       FacebookConnection,
       Post,
+      WebhookDelivery,
     ]),
     AuthModule,
   ],

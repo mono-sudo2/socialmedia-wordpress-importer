@@ -3,11 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  ManyToOne,
-  JoinColumn,
+  OneToMany,
   Index,
 } from 'typeorm';
-import { FacebookConnection } from './facebook-connection.entity';
+import { WebhookDelivery } from './webhook-delivery.entity';
 
 @Entity('posts')
 @Index(['facebookPostId'], { unique: true })
@@ -24,15 +23,6 @@ export class Post {
   @Column({ unique: true })
   facebookPostId: string;
 
-  @Column('text', { nullable: true })
-  content: string;
-
-  @Column()
-  postType: string;
-
-  @Column('jsonb', { nullable: true })
-  metadata: Record<string, any>;
-
   @Column()
   postedAt: Date;
 
@@ -42,7 +32,6 @@ export class Post {
   @CreateDateColumn()
   createdAt: Date;
 
-  @ManyToOne(() => FacebookConnection, (connection) => connection.posts)
-  @JoinColumn({ name: 'facebookConnectionId' })
-  facebookConnection: FacebookConnection;
+  @OneToMany(() => WebhookDelivery, (delivery) => delivery.post)
+  webhookDeliveries: WebhookDelivery[];
 }

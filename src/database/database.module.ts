@@ -5,6 +5,7 @@ import { FacebookConnection } from './entities/facebook-connection.entity';
 import { Post } from './entities/post.entity';
 import { Website } from './entities/website.entity';
 import { WebsiteFacebookConnection } from './entities/website-facebook-connection.entity';
+import { WebhookDelivery } from './entities/webhook-delivery.entity';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { WebsiteFacebookConnection } from './entities/website-facebook-connectio
           Post,
           Website,
           WebsiteFacebookConnection,
+          WebhookDelivery,
         ],
         synchronize: process.env.NODE_ENV !== 'production', // Auto-sync in dev
         logging: process.env.NODE_ENV === 'development',
@@ -29,6 +31,7 @@ import { WebsiteFacebookConnection } from './entities/website-facebook-connectio
       Post,
       Website,
       WebsiteFacebookConnection,
+      WebhookDelivery,
     ]),
   ],
   exports: [TypeOrmModule],

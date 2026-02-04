@@ -5,7 +5,6 @@ import {
   CreateDateColumn,
   OneToMany,
 } from 'typeorm';
-import { Post } from './post.entity';
 import { WebsiteFacebookConnection } from './website-facebook-connection.entity';
 
 @Entity('facebook_connections')
@@ -42,9 +41,6 @@ export class FacebookConnection {
 
   @CreateDateColumn()
   createdAt: Date;
-
-  @OneToMany(() => Post, (post) => post.facebookConnection)
-  posts: Post[];
 
   @OneToMany(
     () => WebsiteFacebookConnection,
