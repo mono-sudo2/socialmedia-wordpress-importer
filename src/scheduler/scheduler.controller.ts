@@ -40,10 +40,7 @@ export class SchedulerController {
     let options: { window: number; offset: number; limit: number } | undefined;
 
     if (hasPagination) {
-      const window = Math.min(
-        Math.max(parsePositiveInt(windowStr, 10), 1),
-        100,
-      );
+      const window = Math.max(parsePositiveInt(windowStr, 10), 1);
       const offset = Math.max(parsePositiveInt(offsetStr, 0), 0);
 
       if (offset >= window) {

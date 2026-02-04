@@ -160,7 +160,10 @@ export class FacebookSyncService {
           ? Math.floor(connection.lastSyncAt.getTime() / 1000)
           : Math.floor(Date.now() / 1000) - 86400; // Default to last 24 hours
 
-      const fetchLimit = isPaginated ? options!.window! : 100;
+      // Per-page limit: always use 100 (Facebook API max) for paginated requests
+      // The window size determines maxPosts (total posts), not per-page limit
+      // Pagination will fetch multiple pages until maxPosts is reached
+      const fetchLimit = 100;
       
       // Calculate maxPosts needed: offset + limit when pagination options are provided
       const maxPosts = isPaginated
