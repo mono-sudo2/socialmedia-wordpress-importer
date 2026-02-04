@@ -570,6 +570,7 @@ export class FacebookService {
    */
   transformAttachments(attachments: { data: unknown[] } | null): Array<{
     url: string;
+    thumbnailUrl?: string;
     width?: number;
     height?: number;
     type: string;
@@ -582,6 +583,7 @@ export class FacebookService {
 
     const images: Array<{
       url: string;
+      thumbnailUrl?: string;
       width?: number;
       height?: number;
       type: string;
@@ -593,9 +595,55 @@ export class FacebookService {
       const att = attachment as {
         type?: string;
         subattachments?: { data?: unknown[] };
-        media?: { image?: { src?: string; width?: number; height?: number } };
+        media?: {
+          image?: { src?: string; width?: number; height?: number };
+          source?: string;
+        };
         target?: { id?: string; url?: string };
         url?: string;
+      };
+
+      // Helper function to check if attachment type is a video
+      const isVideoType = (type?: string): boolean => {
+        if (!type) return false;
+        return type.toLowerCase().includes('video');
+      };
+
+      // Helper function to process a single attachment
+      const processAttachment = (
+        media: {
+          image?: { src?: string; width?: number; height?: number };
+          source?: string;
+        },
+        type?: string,
+        target?: { id?: string; url?: string },
+        url?: string,
+      ): void => {
+        const attachmentType = type || 'photo';
+        const isVideo = isVideoType(attachmentType);
+
+        if (isVideo && media.source) {
+          // Video attachment: use source as primary URL, image as thumbnail
+          images.push({
+            url: media.source,
+            thumbnailUrl: media.image?.src,
+            width: media.image?.width,
+            height: media.image?.height,
+            type: attachmentType,
+            facebookId: target?.id,
+            facebookUrl: url || target?.url,
+          });
+        } else if (media.image?.src) {
+          // Photo or other attachment: use image as primary URL
+          images.push({
+            url: media.image.src,
+            width: media.image.width,
+            height: media.image.height,
+            type: attachmentType,
+            facebookId: target?.id,
+            facebookUrl: url || target?.url,
+          });
+        }
       };
 
       // If attachment has subattachments (like albums), extract those
@@ -604,33 +652,20 @@ export class FacebookService {
           const sub = subAtt as {
             media?: {
               image?: { src?: string; width?: number; height?: number };
+              source?: string;
             };
             target?: { id?: string; url?: string };
             type?: string;
             url?: string;
           };
 
-          if (sub.media?.image?.src) {
-            images.push({
-              url: sub.media.image.src,
-              width: sub.media.image.width,
-              height: sub.media.image.height,
-              type: sub.type || 'photo',
-              facebookId: sub.target?.id,
-              facebookUrl: sub.url || sub.target?.url,
-            });
+          if (sub.media) {
+            processAttachment(sub.media, sub.type, sub.target, sub.url);
           }
         }
-      } else if (att.media?.image?.src) {
+      } else if (att.media) {
         // Single attachment without subattachments
-        images.push({
-          url: att.media.image.src,
-          width: att.media.image.width,
-          height: att.media.image.height,
-          type: att.type || 'photo',
-          facebookId: att.target?.id,
-          facebookUrl: att.url || att.target?.url,
-        });
+        processAttachment(att.media, att.type, att.target, att.url);
       }
     }
 
