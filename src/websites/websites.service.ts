@@ -48,6 +48,20 @@ export class WebsitesService {
     return crypto.createHmac('sha256', authKey).update(payload).digest('hex');
   }
 
+  private buildWebhookUrl(baseUrl: string): string {
+    // Remove trailing slash from baseUrl if present
+    const cleanUrl = baseUrl.replace(/\/+$/, '');
+    // Append the hardcoded endpoint path
+    return `${cleanUrl}/wp-json/social-importer/v1/import`;
+  }
+
+  private buildTestUrl(baseUrl: string): string {
+    // Remove trailing slash from baseUrl if present
+    const cleanUrl = baseUrl.replace(/\/+$/, '');
+    // Append the hardcoded test endpoint path
+    return `${cleanUrl}/wp-json/social-importer/v1/test`;
+  }
+
   private async verifyUserHasAccess(
     organizationId: string,
     userId: string,
@@ -284,8 +298,9 @@ export class WebsitesService {
     try {
       const authKey = this.encryptionService.decrypt(website.encryptedAuthKey);
       const signature = this.generateSignature(payloadString, authKey);
+      const webhookUrl = this.buildWebhookUrl(website.webhookUrl);
 
-      const response = await this.axiosInstance.post(website.webhookUrl, {
+      const response = await this.axiosInstance.post(webhookUrl, {
         ...payload,
         signature,
       });
@@ -345,9 +360,10 @@ export class WebsitesService {
 
     const payloadString = JSON.stringify(payload);
     const signature = this.generateSignature(payloadString, authKey);
+    const webhookUrl = this.buildTestUrl(website.webhookUrl);
 
     try {
-      const response = await this.axiosInstance.post(website.webhookUrl, {
+      const response = await this.axiosInstance.post(webhookUrl, {
         ...payload,
         signature,
       });
