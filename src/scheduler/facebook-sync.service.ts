@@ -37,7 +37,7 @@ export class FacebookSyncService {
     private configService: ConfigService,
   ) {
     this.axiosInstance = axios.create({
-      baseURL: 'https://graph.facebook.com/v18.0',
+      baseURL: 'https://graph.facebook.com/v20.0',
       timeout: 30000,
     });
   }
@@ -101,6 +101,10 @@ export class FacebookSyncService {
     connection: FacebookConnection,
     options?: SyncOptions,
   ): Promise<number> {
+    this.logger.log(
+      `Starting sync for connection ${connection.id} - pageId: ${connection.pageId || 'none'}, facebookUserId: ${connection.facebookUserId}, isActive: ${connection.isActive}, lastSyncAt: ${connection.lastSyncAt || 'never'}`,
+    );
+
     let postsProcessed = 0;
     try {
       // Check if token needs refresh before syncing
@@ -138,6 +142,10 @@ export class FacebookSyncService {
 
       const accessToken = await this.facebookService.getDecryptedAccessToken(
         connection,
+      );
+
+      this.logger.log(
+        `Using access token for sync - connectionId: ${connection.id}, pageId: ${connection.pageId || 'none'}, facebookUserId: ${connection.facebookUserId}, tokenLength: ${accessToken.length}, isPage: ${!!connection.pageId}`,
       );
 
       // Determine the target ID (page or user)
@@ -215,6 +223,10 @@ export class FacebookSyncService {
       ? `/${targetId}/published_posts`
       : `/${targetId}/feed`;
 
+    this.logger.log(
+      `Fetching posts - targetId: ${targetId}, endpoint: ${endpoint}, isPage: ${isPage}, since: ${since}, limit: ${limit}, maxPosts: ${maxPosts || 'none'}, tokenLength: ${accessToken.length}`,
+    );
+
     const allPosts: any[] = [];
     let nextUrl: string | null = null;
     let pageCount = 0;
@@ -222,16 +234,25 @@ export class FacebookSyncService {
     try {
       do {
         pageCount++;
+        const requestUrl = nextUrl || endpoint;
+        this.logger.debug(
+          `Making request to fetch posts - page: ${pageCount}, url: ${requestUrl}`,
+        );
+
         const response = nextUrl
           ? await this.axiosInstance.get(nextUrl)
           : await this.axiosInstance.get(endpoint, {
               params: {
                 access_token: accessToken,
-                fields: 'id,message,created_time,type,story,link,permalink_url',
+                fields: 'id,message,created_time,story,permalink_url',
                 since,
                 limit,
               },
             });
+
+        this.logger.debug(
+          `Posts API response status: ${response.status}, data keys: ${Object.keys(response.data || {}).join(', ')}`,
+        );
 
         const posts = response.data.data || [];
         allPosts.push(...posts);
@@ -257,7 +278,17 @@ export class FacebookSyncService {
       );
 
       return allPosts;
-    } catch (error) {
+    } catch (error: any) {
+      const statusCode = error.response?.status;
+      const errorData = error.response?.data
+        ? JSON.stringify(error.response.data)
+        : 'No error data';
+      const requestUrl = error.config?.url || endpoint;
+
+      this.logger.error(
+        `Failed to fetch posts - targetId: ${targetId}, endpoint: ${endpoint}, status: ${statusCode}, error: ${errorData}, requestUrl: ${requestUrl}`,
+      );
+
       throw new Error(`Failed to fetch posts: ${error.message}`);
     }
   }

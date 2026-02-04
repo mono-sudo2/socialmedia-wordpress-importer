@@ -49,7 +49,7 @@ export class FacebookService {
     this.tokenRefreshThresholdDays = tokenRefreshThresholdDays || 7;
 
     this.axiosInstance = axios.create({
-      baseURL: 'https://graph.facebook.com/v18.0',
+      baseURL: 'https://graph.facebook.com/v20.0',
       timeout: 30000,
     });
   }
@@ -63,7 +63,7 @@ export class FacebookService {
       response_type: 'code',
     });
 
-    return `https://www.facebook.com/v18.0/dialog/oauth?${params.toString()}`;
+    return `https://www.facebook.com/v20.0/dialog/oauth?${params.toString()}`;
   }
 
   async exchangeCodeForToken(code: string): Promise<{
@@ -145,16 +145,45 @@ export class FacebookService {
     userAccessToken: string,
     pageId: string,
   ): Promise<string> {
+    this.logger.log(`Getting page access token for pageId: ${pageId}`);
     try {
-      const response = await this.axiosInstance.get(`/${pageId}`, {
+      const url = `/${pageId}`;
+      this.logger.debug(`Requesting page access token from: ${url}`);
+
+      const response = await this.axiosInstance.get(url, {
         params: {
           access_token: userAccessToken,
           fields: 'access_token',
         },
       });
 
-      return response.data.access_token;
-    } catch (error) {
+      this.logger.debug(
+        `Page access token response status: ${response.status}`,
+      );
+
+      if (!response.data?.access_token) {
+        this.logger.error(
+          `Page access token response missing access_token field. Response data: ${JSON.stringify(response.data)}`,
+        );
+        throw new Error('Page access token not found in response');
+      }
+
+      const pageAccessToken = response.data.access_token;
+      this.logger.log(
+        `Successfully retrieved page access token for pageId: ${pageId} (token length: ${pageAccessToken.length})`,
+      );
+
+      return pageAccessToken;
+    } catch (error: any) {
+      const errorMessage = error.response?.data
+        ? JSON.stringify(error.response.data)
+        : error.message;
+      const statusCode = error.response?.status;
+
+      this.logger.error(
+        `Failed to get page access token for pageId: ${pageId}. Status: ${statusCode}, Error: ${errorMessage}`,
+      );
+
       throw new Error(`Failed to get page access token: ${error.message}`);
     }
   }
@@ -166,11 +195,24 @@ export class FacebookService {
     expiresIn: number,
     pageId?: string,
   ): Promise<FacebookConnection> {
+    this.logger.log(
+      `Saving Facebook connection for userId: ${facebookUserId}, pageId: ${pageId || 'none'}, orgId: ${userInfo.organizationId}`,
+    );
+
     // Get long-lived token
+    this.logger.debug('Getting long-lived token');
     const longLived = await this.getLongLivedToken(accessToken);
+    this.logger.debug(
+      `Long-lived token obtained, expires in: ${longLived.expiresIn} seconds`,
+    );
+
     const pageAccessToken = pageId
       ? await this.getPageAccessToken(longLived.accessToken, pageId)
       : longLived.accessToken;
+
+    this.logger.debug(
+      `Using ${pageId ? 'page' : 'user'} access token (length: ${pageAccessToken.length})`,
+    );
 
     const encryptedAccessToken =
       this.encryptionService.encrypt(pageAccessToken);
@@ -187,7 +229,13 @@ export class FacebookService {
       isActive: true,
     });
 
-    return await this.facebookConnectionRepository.save(connection);
+    const savedConnection =
+      await this.facebookConnectionRepository.save(connection);
+    this.logger.log(
+      `Successfully saved Facebook connection with id: ${savedConnection.id}, pageId: ${savedConnection.pageId || 'none'}`,
+    );
+
+    return savedConnection;
   }
 
   async getConnectionStatus(
@@ -483,7 +531,7 @@ export class FacebookService {
   }
 
   /**
-   * Fetches attachments for a post. Uses same v18.0 as other calls to avoid
+   * Fetches attachments for a post. Uses same v20.0 as other calls to avoid
    * deprecate_post_aggregated_fields_for_attachement in v3.3+.
    */
   async fetchPostAttachments(
