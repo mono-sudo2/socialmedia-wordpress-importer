@@ -20,6 +20,7 @@ import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { GetOrganizationUsersQueryDto } from './dto/get-organization-users-query.dto';
 import { WebsitesService } from '../websites/websites.service';
 import { CreateWebsiteDto } from '../websites/dto/create-website.dto';
+import { WebhookDeliveriesService } from '../webhook-deliveries/webhook-deliveries.service';
 
 @Controller('organizations')
 @UseGuards(AuthGuard)
@@ -27,6 +28,7 @@ export class OrganizationsController {
   constructor(
     private readonly organizationsService: OrganizationsService,
     private readonly websitesService: WebsitesService,
+    private readonly webhookDeliveriesService: WebhookDeliveriesService,
   ) {}
 
   @Post()
@@ -112,6 +114,30 @@ export class OrganizationsController {
     @CurrentUser() user: UserInfo,
   ) {
     return this.organizationsService.getInvitations(id, user.userId);
+  }
+
+  @Get(':id/webhook-deliveries')
+  async getWebhookDeliveries(
+    @Param('id') id: string,
+    @CurrentUser() user: UserInfo,
+    @Query('postId') postId?: string,
+    @Query('websiteId') websiteId?: string,
+    @Query('status') status?: 'success' | 'failed',
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
+  ) {
+    const parsePositiveInt = (v: string | undefined, d: number) => {
+      if (v == null) return d;
+      const p = parseInt(v, 10);
+      return isNaN(p) || p < 1 ? d : p;
+    };
+    return this.webhookDeliveriesService.findByOrganizationId(id, user.userId, {
+      postId: postId || undefined,
+      websiteId: websiteId || undefined,
+      status: status || undefined,
+      page: parsePositiveInt(pageStr, 1),
+      limit: parsePositiveInt(limitStr, 20),
+    });
   }
 
   @Get(':id/users')
