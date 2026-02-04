@@ -35,7 +35,7 @@ export class WebhookDelivery {
   @JoinColumn({ name: 'postId' })
   post: Post;
 
-  @ManyToOne(() => Website)
+  @ManyToOne(() => Website, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'websiteId' })
   website: Website;
 }

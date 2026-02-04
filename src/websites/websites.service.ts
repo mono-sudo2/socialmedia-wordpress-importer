@@ -188,6 +188,13 @@ export class WebsitesService {
   async deleteWebsite(id: string, userId: string): Promise<void> {
     await this.getWebsiteById(id, userId);
 
+    // Delete related webhook deliveries
+    await this.webhookDeliveryRepository.delete({ websiteId: id });
+
+    // WebsiteFacebookConnection will cascade automatically, but we delete explicitly for clarity
+    await this.websiteFacebookConnectionRepository.delete({ websiteId: id });
+
+    // Now delete the website
     const result = await this.websiteRepository.delete({ id });
 
     if (result.affected === 0) {
