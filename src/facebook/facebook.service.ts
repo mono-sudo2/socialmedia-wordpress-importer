@@ -22,6 +22,11 @@ export class FacebookService {
   private readonly redirectUri: string;
   private readonly tokenRefreshThresholdDays: number;
   private readonly axiosInstance: AxiosInstance;
+  private readonly attachmentImageUrlCache = new Map<
+    string,
+    { url: string; expiresAt: number }
+  >();
+  private static readonly ATTACHMENT_IMAGE_CACHE_TTL_MS = 50 * 60 * 1000; // 50 minutes
 
   constructor(
     @InjectRepository(FacebookConnection)
@@ -436,6 +441,67 @@ export class FacebookService {
     connection: FacebookConnection,
   ): Promise<string> {
     return this.encryptionService.decrypt(connection.encryptedAccessToken);
+  }
+
+  /**
+   * Returns a fresh image URL for a Facebook attachment (photo or video thumbnail).
+   * Uses in-memory cache to avoid hitting the Graph API on every request.
+   */
+  async getFreshAttachmentImageUrl(
+    connectionId: string,
+    facebookId: string,
+  ): Promise<string> {
+    const cacheKey = `${connectionId}:${facebookId}`;
+    const cached = this.attachmentImageUrlCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.url;
+    }
+
+    const connection = await this.facebookConnectionRepository.findOne({
+      where: { id: connectionId },
+    });
+    if (!connection) {
+      throw new NotFoundException(
+        `Facebook connection not found: ${connectionId}`,
+      );
+    }
+
+    const accessToken = await this.getDecryptedAccessToken(connection);
+
+    const response = await this.axiosInstance.get<{
+      images?: Array<{ source: string; width?: number; height?: number }>;
+      picture?: string;
+    }>(`/${facebookId}`, {
+      params: {
+        access_token: accessToken,
+        fields: 'images,picture',
+      },
+    });
+
+    const data = response.data;
+    let url: string | undefined;
+
+    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+      const sorted = [...data.images].sort(
+        (a, b) =>
+          (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0),
+      );
+      url = sorted[0].source;
+    } else if (data.picture) {
+      url = data.picture;
+    }
+
+    if (!url) {
+      throw new NotFoundException(
+        `No image URL returned for attachment ${facebookId}`,
+      );
+    }
+
+    const expiresAt =
+      Date.now() + FacebookService.ATTACHMENT_IMAGE_CACHE_TTL_MS;
+    this.attachmentImageUrlCache.set(cacheKey, { url, expiresAt });
+
+    return url;
   }
 
   shouldRefreshToken(connection: FacebookConnection): boolean {

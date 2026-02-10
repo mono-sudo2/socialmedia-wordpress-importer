@@ -346,9 +346,25 @@ export class FacebookSyncService {
     }
 
     // Transform attachments into simplified structure
-    const transformedAttachments = this.facebookService.transformAttachments(
+    let transformedAttachments = this.facebookService.transformAttachments(
       attachments,
     );
+
+    const publicBaseUrl = this.configService.get<string>('app.publicBaseUrl');
+    if (publicBaseUrl?.trim()) {
+      const baseUrl = publicBaseUrl.replace(/\/+$/, '');
+      const isVideo = (type: string) =>
+        type?.toLowerCase().includes('video') ?? false;
+      transformedAttachments = transformedAttachments.map((att) => {
+        if (!att.facebookId) return att;
+        const proxyUrl = `${baseUrl}/facebook/connections/${connection.id}/attachments/${att.facebookId}/image`;
+        return {
+          ...att,
+          url: isVideo(att.type) ? att.url : proxyUrl,
+          ...(att.thumbnailUrl && { thumbnailUrl: proxyUrl }),
+        };
+      });
+    }
 
     const postPayload = {
       content: postData.message || postData.story || '',

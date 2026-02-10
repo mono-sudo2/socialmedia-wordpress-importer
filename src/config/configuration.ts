@@ -1,5 +1,8 @@
 export default () => ({
   port: parseInt(process.env.PORT || '3000', 10) || 3000,
+  app: {
+    publicBaseUrl: process.env.PUBLIC_API_URL || process.env.API_BASE_URL || '',
+  },
   database: {
     url: process.env.DATABASE_URL,
   },

@@ -7,6 +7,8 @@ import {
   Query,
   UseGuards,
   Res,
+  HttpStatus,
+  NotFoundException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { FacebookService } from './facebook.service';
@@ -22,6 +24,31 @@ export class FacebookController {
     private readonly facebookService: FacebookService,
     private readonly postsService: PostsService,
   ) {}
+
+  @Get('connections/:connectionId/attachments/:facebookId/image')
+  async getAttachmentImage(
+    @Param('connectionId') connectionId: string,
+    @Param('facebookId') facebookId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    try {
+      const url = await this.facebookService.getFreshAttachmentImageUrl(
+        connectionId,
+        facebookId,
+      );
+      res.redirect(HttpStatus.FOUND, url);
+    } catch (err: unknown) {
+      const status =
+        err instanceof NotFoundException
+          ? HttpStatus.NOT_FOUND
+          : HttpStatus.BAD_GATEWAY;
+      res.status(status).send(
+        status === HttpStatus.NOT_FOUND
+          ? 'Attachment not found'
+          : 'Failed to resolve image URL',
+      );
+    }
+  }
 
   @Get('callback')
   async handleCallback(

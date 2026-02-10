@@ -6,6 +6,7 @@ Create a `.env` file in the root directory with the following variables:
 # Server Configuration
 PORT=3000
 NODE_ENV=development
+# PUBLIC_API_URL or API_BASE_URL (optional): Public base URL of this API (e.g. https://api.example.com). When set, webhook attachment image URLs are replaced with proxy URLs that resolve through this API so images do not expire.
 
 # Database Configuration
 DATABASE_URL=postgresql://user:password@localhost:5432/facebook_importer
