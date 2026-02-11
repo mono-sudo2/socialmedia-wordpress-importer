@@ -492,6 +492,22 @@ export class FacebookService {
     );
   }
 
+  private isFieldNotFoundError(error: unknown): boolean {
+    const data = (error as { response?: { data?: unknown } })?.response?.data;
+    const fbError =
+      data && typeof data === 'object' && 'error' in data
+        ? (data as { error?: { code?: number; type?: string; message?: string } })
+            .error
+        : undefined;
+    if (!fbError) return false;
+    return (
+      fbError.code === 100 &&
+      fbError.type === 'OAuthException' &&
+      typeof fbError.message === 'string' &&
+      fbError.message.includes('nonexisting field')
+    );
+  }
+
   /**
    * Returns a fresh image URL for a Facebook attachment (photo or video thumbnail).
    * Tries direct Graph API Photo call first; on permissions error falls back to
@@ -555,6 +571,49 @@ export class FacebookService {
 
       return url;
     } catch (directApiError: unknown) {
+      // If images field doesn't exist (e.g., for Video nodes), retry with picture only
+      if (this.isFieldNotFoundError(directApiError)) {
+        this.logger.debug(
+          `Field 'images' not found for ${facebookId}, retrying with 'picture' field only`,
+        );
+        try {
+          const response = await this.axiosInstance.get<{
+            picture?: string;
+          }>(`/${facebookId}`, {
+            params: {
+              access_token: accessToken,
+              fields: 'picture',
+            },
+          });
+
+          const data = response.data;
+          if (data.picture) {
+            const expiresAt =
+              Date.now() + FacebookService.ATTACHMENT_IMAGE_CACHE_TTL_MS;
+            this.attachmentImageUrlCache.set(cacheKey, {
+              url: data.picture,
+              expiresAt,
+            });
+            return data.picture;
+          }
+          throw new NotFoundException(
+            `No picture URL returned for attachment ${facebookId}`,
+          );
+        } catch (retryError: unknown) {
+          // If retry also fails with permissions error, fall through to post attachments lookup
+          if (this.isPermissionsError(retryError)) {
+            this.logger.debug(
+              `Retry with 'picture' field failed with permissions error for ${facebookId}, falling back to post attachments`,
+            );
+            // Fall through to permissions error handling below
+            directApiError = retryError;
+          } else {
+            // If retry fails with non-permissions error, throw the retry error
+            throw retryError;
+          }
+        }
+      }
+
       if (!this.isPermissionsError(directApiError)) {
         throw directApiError;
       }
