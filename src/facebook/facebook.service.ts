@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
+import { PostAttachmentMapping } from '../database/entities/post-attachment-mapping.entity';
 import { EncryptionService } from '../common/encryption.service';
 import { UpdateFacebookConnectionDto } from './dto/update-facebook-connection.dto';
 import { LogtoService } from '../auth/logto.service';
@@ -31,6 +32,8 @@ export class FacebookService {
   constructor(
     @InjectRepository(FacebookConnection)
     private facebookConnectionRepository: Repository<FacebookConnection>,
+    @InjectRepository(PostAttachmentMapping)
+    private postAttachmentMappingRepository: Repository<PostAttachmentMapping>,
     private configService: ConfigService,
     private encryptionService: EncryptionService,
     private logtoService: LogtoService,
@@ -444,8 +447,52 @@ export class FacebookService {
   }
 
   /**
+   * Persists attachment-to-post mapping so the image proxy can resolve via post
+   * when the direct Photo API returns a permissions error.
+   */
+  async upsertAttachmentPostMappings(
+    connectionId: string,
+    facebookPostId: string,
+    attachments: Array<{ facebookId?: string }>,
+  ): Promise<void> {
+    for (const att of attachments) {
+      if (!att.facebookId) continue;
+      await this.postAttachmentMappingRepository.upsert(
+        {
+          facebookConnectionId: connectionId,
+          attachmentFacebookId: att.facebookId,
+          facebookPostId,
+        },
+        {
+          conflictPaths: ['facebookConnectionId', 'attachmentFacebookId'],
+        },
+      );
+    }
+  }
+
+  /**
+   * Returns true when the Facebook API error indicates missing permissions
+   * (e.g. cross-page album photo), so we can fall back to post-attachments.
+   */
+  private isPermissionsError(error: unknown): boolean {
+    const data = (error as { response?: { data?: unknown } })?.response?.data;
+    const fbError =
+      data && typeof data === 'object' && 'error' in data
+        ? (data as { error?: { code?: number; type?: string; message?: string } })
+            .error
+        : undefined;
+    if (!fbError) return false;
+    return (
+      (fbError.code === 200 && fbError.type === 'OAuthException') ||
+      (typeof fbError.message === 'string' &&
+        fbError.message.includes('Missing Permissions'))
+    );
+  }
+
+  /**
    * Returns a fresh image URL for a Facebook attachment (photo or video thumbnail).
-   * Uses in-memory cache to avoid hitting the Graph API on every request.
+   * Tries direct Graph API Photo call first; on permissions error falls back to
+   * resolving via the post's attachments (using persisted mapping).
    */
   async getFreshAttachmentImageUrl(
     connectionId: string,
@@ -468,40 +515,85 @@ export class FacebookService {
 
     const accessToken = await this.getDecryptedAccessToken(connection);
 
-    const response = await this.axiosInstance.get<{
-      images?: Array<{ source: string; width?: number; height?: number }>;
-      picture?: string;
-    }>(`/${facebookId}`, {
-      params: {
-        access_token: accessToken,
-        fields: 'images,picture',
-      },
-    });
+    try {
+      const response = await this.axiosInstance.get<{
+        images?: Array<{ source: string; width?: number; height?: number }>;
+        picture?: string;
+      }>(`/${facebookId}`, {
+        params: {
+          access_token: accessToken,
+          fields: 'images,picture',
+        },
+      });
 
-    const data = response.data;
-    let url: string | undefined;
+      const data = response.data;
+      let url: string | undefined;
 
-    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-      const sorted = [...data.images].sort(
-        (a, b) =>
-          (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0),
+      if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+        const sorted = [...data.images].sort(
+          (a, b) =>
+            (b.width ?? 0) * (b.height ?? 0) -
+            (a.width ?? 0) * (a.height ?? 0),
+        );
+        url = sorted[0].source;
+      } else if (data.picture) {
+        url = data.picture;
+      }
+
+      if (!url) {
+        throw new NotFoundException(
+          `No image URL returned for attachment ${facebookId}`,
+        );
+      }
+
+      const expiresAt =
+        Date.now() + FacebookService.ATTACHMENT_IMAGE_CACHE_TTL_MS;
+      this.attachmentImageUrlCache.set(cacheKey, { url, expiresAt });
+
+      return url;
+    } catch (directApiError: unknown) {
+      if (!this.isPermissionsError(directApiError)) {
+        throw directApiError;
+      }
+
+      this.logger.debug(
+        `Direct Photo API failed with permissions error for ${facebookId}, falling back to post attachments`,
       );
-      url = sorted[0].source;
-    } else if (data.picture) {
-      url = data.picture;
-    }
 
-    if (!url) {
-      throw new NotFoundException(
-        `No image URL returned for attachment ${facebookId}`,
+      const mapping = await this.postAttachmentMappingRepository.findOne({
+        where: {
+          facebookConnectionId: connectionId,
+          attachmentFacebookId: facebookId,
+        },
+      });
+
+      if (!mapping) {
+        throw new NotFoundException(
+          `Attachment not found (no mapping): ${facebookId}`,
+        );
+      }
+
+      const attachments = await this.fetchPostAttachments(
+        mapping.facebookPostId,
+        accessToken,
       );
+      const transformed = this.transformAttachments(attachments);
+      const attachment = transformed.find((a) => a.facebookId === facebookId);
+
+      if (!attachment) {
+        throw new NotFoundException(
+          `Attachment ${facebookId} not found in post ${mapping.facebookPostId}`,
+        );
+      }
+
+      const url =
+        attachment.thumbnailUrl ?? attachment.url;
+      const expiresAt =
+        Date.now() + FacebookService.ATTACHMENT_IMAGE_CACHE_TTL_MS;
+      this.attachmentImageUrlCache.set(cacheKey, { url, expiresAt });
+
+      return url;
     }
-
-    const expiresAt =
-      Date.now() + FacebookService.ATTACHMENT_IMAGE_CACHE_TTL_MS;
-    this.attachmentImageUrlCache.set(cacheKey, { url, expiresAt });
-
-    return url;
   }
 
   shouldRefreshToken(connection: FacebookConnection): boolean {
@@ -798,6 +890,13 @@ export class FacebookService {
     const attachments = await this.fetchPostAttachments(
       facebookPostId,
       accessToken,
+    );
+
+    const transformed = this.transformAttachments(attachments);
+    await this.upsertAttachmentPostMappings(
+      connectionId,
+      facebookPostId,
+      transformed,
     );
 
     return {

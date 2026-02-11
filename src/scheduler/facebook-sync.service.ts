@@ -350,6 +350,12 @@ export class FacebookSyncService {
       attachments,
     );
 
+    await this.facebookService.upsertAttachmentPostMappings(
+      connection.id,
+      postData.id,
+      transformedAttachments,
+    );
+
     const publicBaseUrl = this.configService.get<string>('app.publicBaseUrl');
     if (publicBaseUrl?.trim()) {
       const baseUrl = publicBaseUrl.replace(/\/+$/, '');

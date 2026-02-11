@@ -6,6 +6,7 @@ import { Post } from './entities/post.entity';
 import { Website } from './entities/website.entity';
 import { WebsiteFacebookConnection } from './entities/website-facebook-connection.entity';
 import { WebhookDelivery } from './entities/webhook-delivery.entity';
+import { PostAttachmentMapping } from './entities/post-attachment-mapping.entity';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { WebhookDelivery } from './entities/webhook-delivery.entity';
         entities: [
           FacebookConnection,
           Post,
+          PostAttachmentMapping,
           Website,
           WebsiteFacebookConnection,
           WebhookDelivery,
@@ -29,6 +31,7 @@ import { WebhookDelivery } from './entities/webhook-delivery.entity';
     TypeOrmModule.forFeature([
       FacebookConnection,
       Post,
+      PostAttachmentMapping,
       Website,
       WebsiteFacebookConnection,
       WebhookDelivery,
