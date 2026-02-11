@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { FacebookConnection } from '../database/entities/facebook-connection.entity';
+import { Post } from '../database/entities/post.entity';
 import { PostAttachmentMapping } from '../database/entities/post-attachment-mapping.entity';
 import { EncryptionService } from '../common/encryption.service';
 import { UpdateFacebookConnectionDto } from './dto/update-facebook-connection.dto';
@@ -34,6 +35,8 @@ export class FacebookService {
     private facebookConnectionRepository: Repository<FacebookConnection>,
     @InjectRepository(PostAttachmentMapping)
     private postAttachmentMappingRepository: Repository<PostAttachmentMapping>,
+    @InjectRepository(Post)
+    private postRepository: Repository<Post>,
     private configService: ConfigService,
     private encryptionService: EncryptionService,
     private logtoService: LogtoService,
@@ -560,7 +563,7 @@ export class FacebookService {
         `Direct Photo API failed with permissions error for ${facebookId}, falling back to post attachments`,
       );
 
-      const mapping = await this.postAttachmentMappingRepository.findOne({
+      let mapping = await this.postAttachmentMappingRepository.findOne({
         where: {
           facebookConnectionId: connectionId,
           attachmentFacebookId: facebookId,
@@ -568,6 +571,34 @@ export class FacebookService {
       });
 
       if (!mapping) {
+        this.logger.debug(
+          `No mapping for attachment ${facebookId}, searching connection posts`,
+        );
+        const posts = await this.postRepository.find({
+          where: { facebookConnectionId: connectionId },
+          order: { postedAt: 'DESC' },
+          take: 50,
+        });
+        for (const post of posts) {
+          const attachments = await this.fetchPostAttachments(
+            post.facebookPostId,
+            accessToken,
+          );
+          const transformed = this.transformAttachments(attachments);
+          const attachment = transformed.find((a) => a.facebookId === facebookId);
+          if (attachment) {
+            await this.upsertAttachmentPostMappings(
+              connectionId,
+              post.facebookPostId,
+              transformed,
+            );
+            const url = attachment.thumbnailUrl ?? attachment.url;
+            const expiresAt =
+              Date.now() + FacebookService.ATTACHMENT_IMAGE_CACHE_TTL_MS;
+            this.attachmentImageUrlCache.set(cacheKey, { url, expiresAt });
+            return url;
+          }
+        }
         throw new NotFoundException(
           `Attachment not found (no mapping): ${facebookId}`,
         );
@@ -586,8 +617,7 @@ export class FacebookService {
         );
       }
 
-      const url =
-        attachment.thumbnailUrl ?? attachment.url;
+      const url = attachment.thumbnailUrl ?? attachment.url;
       const expiresAt =
         Date.now() + FacebookService.ATTACHMENT_IMAGE_CACHE_TTL_MS;
       this.attachmentImageUrlCache.set(cacheKey, { url, expiresAt });
